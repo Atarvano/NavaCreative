@@ -167,7 +167,9 @@
      or the pin-spacer offset breaks their start math and they clash with the
      section above. */
   gsap.utils
-    .toArray(".section-title, .about-statement, .cta-title, .footer-word")
+    .toArray(
+      ".section-title, .about-statement, .service-title, .cta-title, .footer-word"
+    )
     .forEach(function (heading) {
       gsap.to(heading.querySelectorAll(".line"), {
         y: 0,
@@ -239,7 +241,7 @@
 
   /* Services: rows cascade */
   gsap.fromTo(
-    ".service",
+    ".service-row",
     { opacity: 0, y: 36 },
     {
       opacity: 1,
@@ -324,36 +326,41 @@
       );
     });
 
-    /* Services: cursor-follow preview */
+    /* Services: cursor-follow preview. Landing page only — service pages
+       have no #servicesPreview / #servicesList and must not throw. */
     var preview = document.getElementById("servicesPreview");
-    var pImg = preview.querySelector("img");
-    var pX = gsap.quickTo(preview, "x", { duration: 0.5, ease: "power3.out" });
-    var pY = gsap.quickTo(preview, "y", { duration: 0.5, ease: "power3.out" });
     var list = document.getElementById("servicesList");
+    if (preview && list) {
+      var pImg = preview.querySelector("img");
+      var pX = gsap.quickTo(preview, "x", { duration: 0.5, ease: "power3.out" });
+      var pY = gsap.quickTo(preview, "y", { duration: 0.5, ease: "power3.out" });
 
-    gsap.set(preview, { xPercent: -50, yPercent: -50, scale: 0.85, autoAlpha: 0 });
+      gsap.set(preview, { xPercent: -50, yPercent: -50, scale: 0.85, autoAlpha: 0 });
 
-    list.addEventListener("pointermove", function (e) {
-      pX(e.clientX);
-      pY(e.clientY);
-    }, signal);
-    gsap.utils.toArray(".service").forEach(function (row) {
-      row.addEventListener("pointerenter", function () {
-        var src = row.getAttribute("data-img");
-        if (pImg.getAttribute("src") !== src) pImg.setAttribute("src", src);
-        gsap.to(preview, { autoAlpha: 1, scale: 1, duration: 0.4, ease: "power3.out" });
+      list.addEventListener("pointermove", function (e) {
+        pX(e.clientX);
+        pY(e.clientY);
       }, signal);
-      row.addEventListener("pointerleave", function () {
-        gsap.to(preview, { autoAlpha: 0, scale: 0.85, duration: 0.35, ease: "power3.out" });
-      }, signal);
-    });
+      gsap.utils.toArray(".service-row").forEach(function (row) {
+        row.addEventListener("pointerenter", function () {
+          var src = row.getAttribute("data-img");
+          if (pImg.getAttribute("src") !== src) pImg.setAttribute("src", src);
+          gsap.to(preview, { autoAlpha: 1, scale: 1, duration: 0.4, ease: "power3.out" });
+        }, signal);
+        row.addEventListener("pointerleave", function () {
+          gsap.to(preview, { autoAlpha: 0, scale: 0.85, duration: 0.35, ease: "power3.out" });
+        }, signal);
+      });
+    }
 
-    /* Work: horizontal scroll pin (canonical: start top top, scrub, invalidate) */
+    /* Work: horizontal scroll pin (canonical: start top top, scrub, invalidate). */
     var wTrack = document.getElementById("workTrack");
+    var scrollTween = null;
+    if (wTrack) {
     var distance = function () {
       return wTrack.scrollWidth - window.innerWidth;
     };
-    var scrollTween = gsap.to(wTrack, {
+    scrollTween = gsap.to(wTrack, {
       x: function () { return -distance(); },
       ease: "none",
       scrollTrigger: {
@@ -385,9 +392,11 @@
         }
       );
     });
+    }
 
     /* Team: sticky stack (canonical: start top top, pinSpacing false) */
     var cards = gsap.utils.toArray(".team-card");
+    if (cards.length) {
     var last = cards[cards.length - 1];
     cards.forEach(function (card, i) {
       if (i === cards.length - 1) return;
@@ -411,6 +420,7 @@
         },
       });
     });
+    }
 
     /* Magnetic buttons */
     gsap.utils.toArray(".magnetic").forEach(function (btn) {

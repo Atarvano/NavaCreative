@@ -434,17 +434,17 @@ section { padding: clamp(64px, 11vh, var(--spacing-112)) var(--pad); }
    Services: editorial index, hairline rows, circular chevrons
    -------------------------------------------------------------------------- */
 .services-list { border-top: 1px solid var(--color-ash); }
-.service {
+.service { border-bottom: 1px solid var(--color-ash); }
+.service-row {
   display: grid;
   grid-template-columns: 4rem 1fr auto;
   align-items: center;
   gap: var(--spacing-24);
   padding: var(--spacing-32) var(--spacing-8);
-  border-bottom: 1px solid var(--color-ash);
   cursor: pointer;
   transition: padding 0.3s var(--ease-out);
 }
-.service:hover { padding-left: var(--spacing-24); padding-right: var(--spacing-24); }
+.service:hover .service-row { padding-left: var(--spacing-24); padding-right: var(--spacing-24); }
 .service-num {
   font-size: var(--text-caption);
   color: var(--color-graphite);
@@ -546,6 +546,52 @@ section { padding: clamp(64px, 11vh, var(--spacing-112)) var(--pad); }
   .work-frame { height: min(44vh, 460px); }
   .work-track { padding-bottom: var(--spacing-32); }
 }
+
+/* --------------------------------------------------------------------------
+   Service page: statement + related Work/Live gallery (flat root pages)
+   -------------------------------------------------------------------------- */
+.service-detail { padding-top: calc(var(--nav-h) + var(--spacing-64)); }
+.service-title {
+  font-size: clamp(2.75rem, 8vw, var(--text-display));
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: var(--spacing-32);
+}
+.service-lede {
+  font-size: var(--text-subheading);
+  font-weight: 300;
+  color: var(--color-graphite);
+  max-width: 34ch;
+  margin-bottom: var(--spacing-64);
+}
+.service-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-64) var(--spacing-48);
+}
+.service-more {
+  margin-top: var(--spacing-64);
+  padding-top: var(--spacing-32);
+  border-top: 1px solid var(--color-ash);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-16);
+  align-items: center;
+}
+.service-more-head {
+  width: 100%;
+  font-size: var(--text-caption);
+  text-transform: uppercase;
+  color: var(--color-graphite);
+}
+.service-more-link {
+  font-size: var(--text-body-sm);
+  padding: 8px 16px;
+  border: 1px solid var(--color-ash);
+  border-radius: var(--radius-full);
+  transition: border-color 0.25s ease;
+}
+.service-more-link:hover { border-color: var(--color-ink-black); }
 
 /* --------------------------------------------------------------------------
    Live grid
@@ -772,7 +818,7 @@ body.menu-locked { overflow: hidden; }
   .about-copy { position: static; max-width: none; }
   .about-photos figure:nth-child(2) { margin-top: var(--spacing-32); }
 
-  .service { grid-template-columns: 2.5rem 1fr auto; gap: var(--spacing-16); padding: var(--spacing-24) var(--spacing-8); }
+  .service-row { grid-template-columns: 2.5rem 1fr auto; gap: var(--spacing-16); padding: var(--spacing-24) var(--spacing-8); }
   .service-name { font-size: clamp(1.15rem, 4.5vw, 1.5rem); }
 
   .work-track {
@@ -786,6 +832,7 @@ body.menu-locked { overflow: hidden; }
   .work-card-l .work-frame { aspect-ratio: 3 / 4; }
 
   .live-grid { grid-template-columns: 1fr; gap: var(--spacing-48); }
+  .service-gallery { grid-template-columns: 1fr; gap: var(--spacing-48); }
 
   .team-card, .team-card--flip { grid-template-columns: 1fr; min-height: 0; padding: var(--spacing-24); gap: var(--spacing-16); }
   .team-card--flip .team-photo { order: 0; }
