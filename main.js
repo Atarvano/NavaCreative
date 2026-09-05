@@ -14,29 +14,34 @@
   if (noGsap) body.classList.add("no-js");
   else if (!reduced) body.classList.remove("no-js");
 
-  var nav = document.getElementById("nav");
+  var nav = document.getElementById("nav") || document.getElementById("backbar");
+  var hiddenClass = nav && nav.id === "backbar" ? "backbar--hidden" : "nav--hidden";
   var overlay = document.getElementById("menuOverlay");
   var menuBtn = document.getElementById("menuBtn");
   var menuClose = document.getElementById("menuClose");
+  var hasMenu = overlay && menuBtn && menuClose;
   var menuOpen = false;
 
   /* Menu: plain class toggle for reduced-motion / no-JS visitors */
   function setMenu(open) {
     menuOpen = open;
+    if (!hasMenu) return;
     overlay.classList.toggle("is-open", open);
     menuBtn.setAttribute("aria-expanded", String(open));
     overlay.setAttribute("aria-hidden", String(!open));
     document.body.classList.toggle("menu-locked", open);
   }
   if (noGsap || reduced) {
-    menuBtn.addEventListener("click", function () { setMenu(!menuOpen); });
-    menuClose.addEventListener("click", function () { setMenu(false); });
-    overlay.querySelectorAll(".menu-link").forEach(function (l) {
-      l.addEventListener("click", function () { setMenu(false); });
-    });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && menuOpen) setMenu(false);
-    });
+    if (hasMenu) {
+      menuBtn.addEventListener("click", function () { setMenu(!menuOpen); });
+      menuClose.addEventListener("click", function () { setMenu(false); });
+      overlay.querySelectorAll(".menu-link").forEach(function (l) {
+        l.addEventListener("click", function () { setMenu(false); });
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && menuOpen) setMenu(false);
+      });
+    }
     return;
   }
 
@@ -48,54 +53,58 @@
     document.fonts.ready.then(function () { ScrollTrigger.refresh(); });
   }
 
-  /* Full-screen menu: clip reveal, links cascade, close reverses */
-  var menuTl = gsap.timeline({ paused: true });
-  menuTl
-    .set(overlay, { visibility: "visible" })
-    .to(overlay, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.7, ease: "expo.inOut" })
-    .fromTo(
-      overlay.querySelectorAll(".menu-link .menu-line"),
-      { yPercent: 115 },
-      { yPercent: 0, duration: 0.8, ease: "expo.out", stagger: 0.06, immediateRender: false },
-      "-=0.25"
-    )
-    .fromTo(
-      ".menu-meta a",
-      { opacity: 0, y: 14 },
-      { opacity: 1, y: 0, duration: 0.5, ease: "power3.out", stagger: 0.06 },
-      "-=0.4"
-    );
-
-  function openMenu() {
-    setMenu(true);
-    nav.classList.remove("nav--hidden");
-    menuTl.timeScale(1).play();
-  }
-  function closeMenu() {
-    setMenu(false);
-    menuTl.timeScale(1.6).reverse();
-  }
-  menuBtn.addEventListener("click", openMenu);
-  menuClose.addEventListener("click", closeMenu);
-  overlay.querySelectorAll(".menu-link").forEach(function (l) {
-    l.addEventListener("click", closeMenu);
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && menuOpen) closeMenu();
-  });
-
-  /* Nav: hide on scroll down (never while the menu is open) */
-  ScrollTrigger.create({
-    start: 0,
-    end: "max",
-    onUpdate: function (self) {
-      if (menuOpen) return;
-      nav.classList.toggle(
-        "nav--hidden",
-        self.direction === 1 && self.scroll() > 160
+  /* Full-screen menu (index only — service pages use the back bar) */
+  if (hasMenu) {
+    var menuTl = gsap.timeline({ paused: true });
+    menuTl
+      .set(overlay, { visibility: "visible" })
+      .to(overlay, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.7, ease: "expo.inOut" })
+      .fromTo(
+        overlay.querySelectorAll(".menu-link .menu-line"),
+        { yPercent: 115 },
+        { yPercent: 0, duration: 0.8, ease: "expo.out", stagger: 0.06, immediateRender: false },
+        "-=0.25"
+      )
+      .fromTo(
+        ".menu-meta a",
+        { opacity: 0, y: 14 },
+        { opacity: 1, y: 0, duration: 0.5, ease: "power3.out", stagger: 0.06 },
+        "-=0.4"
       );
-    },
-  });
+
+    var openMenu = function () {
+      setMenu(true);
+      nav.classList.remove(hiddenClass);
+      menuTl.timeScale(1).play();
+    };
+    var closeMenu = function () {
+      setMenu(false);
+      menuTl.timeScale(1.6).reverse();
+    };
+    menuBtn.addEventListener("click", openMenu);
+    menuClose.addEventListener("click", closeMenu);
+    overlay.querySelectorAll(".menu-link").forEach(function (l) {
+      l.addEventListener("click", closeMenu);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && menuOpen) closeMenu();
+    });
+  }
+
+  /* Nav/back bar: hide on scroll down (never while the menu is open) */
+  if (nav) {
+    ScrollTrigger.create({
+      start: 0,
+      end: "max",
+      onUpdate: function (self) {
+        if (menuOpen) return;
+        nav.classList.toggle(
+          hiddenClass,
+          self.direction === 1 && self.scroll() > 160
+        );
+      },
+    });
+  }
 
   /* Fade-up reveals */
   gsap.utils.toArray("[data-reveal]").forEach(function (el) {
