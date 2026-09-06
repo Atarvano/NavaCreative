@@ -1,5 +1,6 @@
 <script>
   import Nav from './components/Nav.svelte';
+  import Preloader from './components/Preloader.svelte';
   import Hero from './components/Hero.svelte';
   import Marquee from './components/Marquee.svelte';
   import About from './components/About.svelte';
@@ -11,16 +12,18 @@
   import Footer from './components/Footer.svelte';
   import MenuOverlay from './components/MenuOverlay.svelte';
 
-  // Ticket 03: Work lands with its desktop pin + card motion. Remaining
-  // page animation (preloader, reveals, marquee, team stack) is ticket 04.
+  // Ticket 04: preloader owns the intro gate and plays the hero's paused
+  // timeline when it lifts (or immediately under reduced motion).
   let menuOpen = $state(false);
+  let hero;
 </script>
 
 <Nav onmenu={() => (menuOpen = true)} open={menuOpen} />
 <MenuOverlay open={menuOpen} onclose={() => (menuOpen = false)} />
+<Preloader ondone={() => hero?.play?.()} />
 
 <main>
-  <Hero />
+  <Hero bind:this={hero} />
   <Marquee />
   <About />
   <Services />

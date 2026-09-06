@@ -97,7 +97,7 @@
   });
 </script>
 
-<!-- Work: horizontal print portfolio. Static here 1:1 with legacy/index.html. -->
+<!-- Work: horizontal print portfolio. 1:1 with legacy/index.html markup. -->
 <section class="work" id="work" bind:this={section}>
   <div class="work-head">
     <div>

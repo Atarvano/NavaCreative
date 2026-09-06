@@ -1,5 +1,53 @@
+<script>
+  import { onMount, onDestroy } from 'svelte';
+  import { gsap, motion, lines, reveals, magnetic } from '../lib/motion.js';
+
+  // CTA heading line reveal + magnetic button (desktop) + stills plates
+  // scale/opacity rise with CSS translateY offsets preserved: only opacity
+  // and scale animate, never y.
+  let section;
+  let ctx;
+  let mm;
+
+  onMount(() => {
+    ctx = motion(section, () => {
+      lines(section.querySelector('.cta-title'));
+      reveals(section);
+      gsap.fromTo(
+        section.querySelectorAll('.cta-strip img'),
+        { opacity: 0, scale: 0.92 },
+        {
+          opacity: 1,
+          scale: 1,
+          duration: 0.8,
+          ease: 'power3.out',
+          stagger: 0.12,
+          scrollTrigger: {
+            trigger: section.querySelector('.cta-strip'),
+            start: 'top 90%',
+            once: true,
+          },
+        }
+      );
+      mm = gsap.matchMedia();
+      mm.add('(min-width: 769px)', () => {
+        const ac = new AbortController();
+        section
+          .querySelectorAll('.magnetic')
+          .forEach((btn) => magnetic(btn, ac.signal));
+        return () => ac.abort();
+      });
+    });
+  });
+
+  onDestroy(() => {
+    mm?.revert();
+    ctx?.revert();
+  });
+</script>
+
 <!-- CTA: the one inverted featured block + stills strip. 1:1 with legacy/index.html markup. -->
-<section class="cta" id="contact">
+<section class="cta" id="contact" bind:this={section}>
   <p class="eyebrow eyebrow-invert">Contact</p>
   <h2 class="cta-title">
     <span class="line-mask"><span class="line">Ready to work</span></span>

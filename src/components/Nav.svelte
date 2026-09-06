@@ -1,9 +1,39 @@
-<!-- Nav: editorial lockup + inline links + mobile Menu pill. Plain onclick here, no GSAP — the hide-on-scroll + menu timeline land in ticket 04. 1:1 with legacy/index.html markup. -->
 <script>
+  import { onMount, onDestroy } from 'svelte';
+  import { ScrollTrigger, motion } from '../lib/motion.js';
+
+  // Hide-on-scroll chrome (never while the menu is open); reappears when
+  // the overlay opens.
   let { onmenu, open = false } = $props();
+
+  let header;
+  let ctx;
+
+  $effect(() => {
+    if (open) header?.classList.remove('nav--hidden');
+  });
+
+  onMount(() => {
+    ctx = motion(header, () => {
+      ScrollTrigger.create({
+        start: 0,
+        end: 'max',
+        onUpdate: (self) => {
+          if (open) return;
+          header.classList.toggle(
+            'nav--hidden',
+            self.direction === 1 && self.scroll() > 160
+          );
+        },
+      });
+    });
+  });
+
+  onDestroy(() => ctx?.revert());
 </script>
 
-<header class="nav" id="nav">
+<!-- Nav: editorial lockup + inline links + mobile Menu pill. 1:1 with legacy/index.html markup. -->
+<header class="nav" id="nav" bind:this={header}>
   <a class="nav-lockup" href="#home">
     <span class="nav-mark" aria-hidden="true"></span>
     <span class="nav-eyebrow">Nava Creative //<br />Photo &amp; Video Studio</span>

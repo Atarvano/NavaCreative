@@ -1,5 +1,22 @@
+<script>
+  import { onMount, onDestroy } from 'svelte';
+  import { motion, lines } from '../lib/motion.js';
+
+  // Giant closing wordmark line reveal.
+  let footer;
+  let ctx;
+
+  onMount(() => {
+    ctx = motion(footer, () => {
+      lines(footer.querySelector('.footer-word'));
+    });
+  });
+
+  onDestroy(() => ctx?.revert());
+</script>
+
 <!-- Footer: colophon. 1:1 with legacy/index.html markup. -->
-<footer class="footer">
+<footer class="footer" bind:this={footer}>
   <p class="footer-word" aria-hidden="true"><span class="line-mask"><span class="line">Nava Creative<i class="footer-dot"></i></span></span></p>
   <div class="footer-grid">
     <div class="footer-brand">
