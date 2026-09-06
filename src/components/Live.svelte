@@ -1,5 +1,60 @@
-<!-- Live: event records grid. Static here; parallax frames land in ticket 04. 1:1 with legacy/index.html markup. -->
-<section class="live" id="live">
+<script>
+  import { onMount, onDestroy } from 'svelte';
+  import { gsap, motion, lines } from '../lib/motion.js';
+
+  // Heading line reveal + card cascade; desktop adds the parallax scrub
+  // on each frame's img (triggered off the .parallax wrapper, like legacy).
+  let section;
+  let ctx;
+  let mm;
+
+  onMount(() => {
+    ctx = motion(section, () => {
+      lines(section.querySelector('.section-title'));
+      section.querySelectorAll('.live-card').forEach((card, i) => {
+        gsap.fromTo(
+          card,
+          { opacity: 0, y: 44 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.85,
+            ease: 'power3.out',
+            delay: (i % 2) * 0.12,
+            scrollTrigger: { trigger: card, start: 'top 86%', once: true },
+          }
+        );
+      });
+      mm = gsap.matchMedia();
+      mm.add('(min-width: 769px)', () => {
+        section.querySelectorAll('.parallax img').forEach((img) => {
+          gsap.fromTo(
+            img,
+            { yPercent: -7 },
+            {
+              yPercent: 7,
+              ease: 'none',
+              scrollTrigger: {
+                trigger: img.closest('.parallax'),
+                start: 'top bottom',
+                end: 'bottom top',
+                scrub: true,
+              },
+            }
+          );
+        });
+      });
+    });
+  });
+
+  onDestroy(() => {
+    mm?.revert();
+    ctx?.revert();
+  });
+</script>
+
+<!-- Live: event records grid. 1:1 with legacy/index.html markup. -->
+<section class="live" id="live" bind:this={section}>
   <h2 class="section-title">
     <span class="line-mask"><span class="line">Live &amp; documented</span></span>
   </h2>

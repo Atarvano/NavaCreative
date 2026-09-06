@@ -1,5 +1,56 @@
-<!-- Team: the four Makers. Static here; the desktop sticky stack lands in ticket 04. 1:1 with legacy/index.html markup. -->
-<section class="team" id="team">
+<script>
+  import { onMount, onDestroy } from 'svelte';
+  import { gsap, ScrollTrigger, motion, lines } from '../lib/motion.js';
+
+  // Heading line reveal everywhere; desktop adds the sticky stack (each
+  // card pins until the last arrives, pinSpacing false, with a scale/fade
+  // as the next card covers it) — canonical legacy geometry.
+  let section;
+  let ctx;
+  let mm;
+
+  onMount(() => {
+    ctx = motion(section, () => {
+      lines(section.querySelector('.section-title'));
+      mm = gsap.matchMedia();
+      mm.add('(min-width: 769px)', () => {
+        const cards = gsap.utils.toArray(section.querySelectorAll('.team-card'));
+        if (!cards.length) return;
+        const last = cards[cards.length - 1];
+        cards.forEach((card, i) => {
+          if (i === cards.length - 1) return;
+          ScrollTrigger.create({
+            trigger: card,
+            start: 'top top',
+            endTrigger: last,
+            end: 'top top',
+            pin: true,
+            pinSpacing: false,
+          });
+          gsap.to(card, {
+            scale: 0.94,
+            opacity: 0.55,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: cards[i + 1],
+              start: 'top bottom',
+              end: 'top top',
+              scrub: true,
+            },
+          });
+        });
+      });
+    });
+  });
+
+  onDestroy(() => {
+    mm?.revert();
+    ctx?.revert();
+  });
+</script>
+
+<!-- Team: the four Makers. 1:1 with legacy/index.html markup. -->
+<section class="team" id="team" bind:this={section}>
   <h2 class="section-title team-title">
     <span class="line-mask"><span class="line">Meet the makers</span></span>
   </h2>

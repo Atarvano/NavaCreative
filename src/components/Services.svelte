@@ -1,5 +1,69 @@
-<!-- Services: editorial index of the five Service pages. Static here; the cursor preview lands in ticket 04. 1:1 with legacy/index.html markup. -->
-<section class="services" id="services">
+<script>
+  import { onMount, onDestroy } from 'svelte';
+  import { gsap, motion, lines } from '../lib/motion.js';
+
+  // Heading line reveal + row cascade; desktop adds the cursor-follow
+  // preview with quickTo, cleaned up by the AbortController on breakpoint
+  // revert. Preview borrows the service-row data-img swap from legacy.
+  let section;
+  let ctx;
+  let mm;
+
+  onMount(() => {
+    ctx = motion(section, () => {
+      lines(section.querySelector('.section-title'));
+      gsap.fromTo(
+        section.querySelectorAll('.service-row'),
+        { opacity: 0, y: 36 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.7,
+          ease: 'power3.out',
+          stagger: 0.07,
+          scrollTrigger: {
+            trigger: section.querySelector('#servicesList'),
+            start: 'top 82%',
+            once: true,
+          },
+        }
+      );
+
+      mm = gsap.matchMedia();
+      mm.add('(min-width: 769px)', () => {
+        const ac = new AbortController();
+        const preview = section.querySelector('#servicesPreview');
+        const list = section.querySelector('#servicesList');
+        if (preview && list) {
+          const pImg = preview.querySelector('img');
+          const pX = gsap.quickTo(preview, 'x', { duration: 0.5, ease: 'power3.out' });
+          const pY = gsap.quickTo(preview, 'y', { duration: 0.5, ease: 'power3.out' });
+          gsap.set(preview, { xPercent: -50, yPercent: -50, scale: 0.85, autoAlpha: 0 });
+          list.addEventListener('pointermove', (e) => { pX(e.clientX); pY(e.clientY); }, { signal: ac.signal });
+          section.querySelectorAll('.service-row').forEach((row) => {
+            row.addEventListener('pointerenter', () => {
+              const src = row.getAttribute('data-img');
+              if (pImg.getAttribute('src') !== src) pImg.setAttribute('src', src);
+              gsap.to(preview, { autoAlpha: 1, scale: 1, duration: 0.4, ease: 'power3.out' });
+            }, { signal: ac.signal });
+            row.addEventListener('pointerleave', () => {
+              gsap.to(preview, { autoAlpha: 0, scale: 0.85, duration: 0.35, ease: 'power3.out' });
+            }, { signal: ac.signal });
+          });
+        }
+        return () => ac.abort();
+      });
+    });
+  });
+
+  onDestroy(() => {
+    mm?.revert();
+    ctx?.revert();
+  });
+</script>
+
+<!-- Services: editorial index of the five Service pages. 1:1 with legacy/index.html markup. -->
+<section class="services" id="services" bind:this={section}>
   <h2 class="section-title">
     <span class="line-mask"><span class="line">What we do</span></span>
   </h2>
