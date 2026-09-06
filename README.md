@@ -11,8 +11,8 @@ npm run dev      # Vite dev server
 npm run build    # host-anywhere static output in dist/
 ```
 
-The pre-Svelte hand-coded pages are frozen as read-only reference in
-`legacy/` (deleted at cutover, ticket 06).
+The pre-Svelte hand-coded pages were removed at cutover (ticket 06); this
+Svelte build is the only site.
 
 ## Stack
 
