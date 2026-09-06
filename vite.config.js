@@ -13,8 +13,13 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        // Ticket 01: index only. Service-page entries land in ticket 05.
+        // Ticket 01: index only. Ticket 05: the five Service pages.
         main: resolve(rootDir, 'index.html'),
+        'photo-video': resolve(rootDir, 'photo-video.html'),
+        'photo-product': resolve(rootDir, 'photo-product.html'),
+        'graphic-design': resolve(rootDir, 'graphic-design.html'),
+        'social-media': resolve(rootDir, 'social-media.html'),
+        'live-streaming': resolve(rootDir, 'live-streaming.html'),
       },
     },
   },

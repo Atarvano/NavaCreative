@@ -3,6 +3,10 @@
   import { motion, lines } from '../lib/motion.js';
 
   // Giant closing wordmark line reveal.
+  // `base` prefixes the menu anchors: '' on the index, 'index.html'
+  // on service pages so subpage section links never strand the visitor.
+  let { base = '' } = $props();
+
   let footer;
   let ctx;
 
@@ -31,10 +35,10 @@
     </div>
     <div class="footer-col">
       <p class="footer-head">Menu</p>
-      <a href="#about">About</a>
-      <a href="#services">Services</a>
-      <a href="#work">Work</a>
-      <a href="#team">Team</a>
+      <a href="{base}#about">About</a>
+      <a href="{base}#services">Services</a>
+      <a href="{base}#work">Work</a>
+      <a href="{base}#team">Team</a>
     </div>
   </div>
   <p class="footer-base">Copyright 2025 Nava Creative, Batam</p>
