@@ -799,13 +799,10 @@ section { padding: clamp(64px, 11vh, var(--spacing-112)) var(--pad); }
 /* --------------------------------------------------------------------------
    Reveal initial states (JS animates to visible; no-JS/reduced shows content)
    -------------------------------------------------------------------------- */
-/* Svelte shell: content renders statically until each component's animation
-   owns its own initial states (ticket 04). The only intentional divergence
-   from the root stylesheet. */
-body:not(.no-js):not(.reduced):not(.svelte-shell) [data-reveal] { opacity: 0; transform: translateY(28px); }
-body:not(.no-js):not(.reduced):not(.svelte-shell) .line-mask .line { transform: translateY(115%); }
-body:not(.no-js):not(.reduced):not(.svelte-shell) .hero-frame { clip-path: inset(0% 0% 100% 0%); }
-body:not(.no-js):not(.reduced):not(.svelte-shell) .hero-side > * { opacity: 0; transform: translateY(24px); }
+body:not(.no-js):not(.reduced) [data-reveal] { opacity: 0; transform: translateY(28px); }
+body:not(.no-js):not(.reduced) .line-mask .line { transform: translateY(115%); }
+body:not(.no-js):not(.reduced) .hero-frame { clip-path: inset(0% 0% 100% 0%); }
+body:not(.no-js):not(.reduced) .hero-side > * { opacity: 0; transform: translateY(24px); }
 body.no-js .line, body.reduced .line,
 body.no-js [data-reveal], body.reduced [data-reveal],
 body.no-js .hero-side > *, body.reduced .hero-side > * { opacity: 1 !important; transform: none !important; }

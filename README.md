@@ -1,23 +1,24 @@
 # Nava Creative - Landing Page
 
-Rebuild of `navacreative.my.canva.site/homee` as a hand-coded, GSAP-animated
-landing page. All content and photography scraped from the original Canva site.
+Rebuild of `navacreative.my.canva.site/homee` as a Svelte 5 + Vite static
+site. All content and photography scraped from the original Canva site.
 
 ## Run
 
 ```bash
-npx http-server -p 4173
-# open http://127.0.0.1:4173
+npm install
+npm run dev      # Vite dev server
+npm run build    # host-anywhere static output in dist/
 ```
 
-Any static server works. GSAP loads from jsDelivr CDN (falls back to a static
-page if blocked).
+The pre-Svelte hand-coded pages are frozen as read-only reference in
+`legacy/` (deleted at cutover, ticket 06).
 
 ## Stack
 
-- Vanilla HTML/CSS/JS, GSAP 3 + ScrollTrigger (CDN)
-- Dark theme, single accent `#ff5757`, Space Grotesk + JetBrains Mono
-- 23 scraped photos in `img/`
+- Svelte 5 + Vite MPA, GSAP 3 + ScrollTrigger (npm)
+- "Creative Giants" style system (`design.md`): canvas `#f0efe9`, Plus Jakarta Sans, Caption plates
+- 29 scraped photos in `public/img/`
 
 ## Motion inventory
 
