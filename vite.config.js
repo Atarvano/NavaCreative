@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
 
 const rootDir = import.meta.dirname;
@@ -9,7 +10,7 @@ const rootDir = import.meta.dirname;
 export default defineConfig({
   // Relative asset URLs so dist/ loads from any static host or subpath.
   base: './',
-  plugins: [svelte()],
+  plugins: [tailwindcss(), svelte()],
   build: {
     rollupOptions: {
       input: {

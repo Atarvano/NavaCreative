@@ -1,0 +1,72 @@
+/* ==========================================================================
+   NAVA CREATIVE - Tailwind v4 theme ("Creative Giants" tokens, design.md)
+   No reset import: the repo carries its own reset + base in ./base.css, so
+   no reset ever shifts legacy selectors. The legacy sheet rides in a
+   `legacy` layer below utilities (deleted at cutover, ticket 06), so from
+   ticket 02 on migrated utilities verifiably win over legacy rules.
+   Spacing uses the v4 dynamic scale: 8px = *-2, 16px = *-4, 24px = *-6,
+   32px = *-8, 48px = *-12, 64px = *-16, 80px = *-20, 112px = *-28.
+   Fluid page padding stays a plain var (--pad), used via arbitrary values
+   (e.g. px-(--pad)). Tracking values follow styles.css (em), not the px
+   typo in design.md's scale table.
+   ========================================================================== */
+
+@layer theme, legacy, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "../../styles.css" layer(legacy);
+@import "./base.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+ /* Colors (design.md tokens) */
+ --color-bone-white: #fffef7;
+ --color-canvas: #f0efe9; /* user-tuned: warm gray page ground, replaces bone as canvas */
+ --color-ink-black: #000000;
+ --color-graphite: #666666;
+ --color-ash: #aaaaaa;
+ --color-charcoal-scale: #4d4c4a;
+ --color-magenta-bloom: #8a0467;
+ --color-forest-teal: #03624c;
+ --color-powder-blue: #a5c8eb;
+ --color-candy-pink: #ffacea;
+ --color-mint-wash: #a5ebd6;
+ --color-navy-ink: #101731;
+ --color-signal-yellow: #ffd001;
+
+ /* Typography */
+ --font-sans:
+  "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+  BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+ --text-caption: 12px;
+ --text-caption--line-height: 1.43;
+ --text-caption--letter-spacing: -0.018em;
+ --text-body-sm: 14px;
+ --text-body-sm--line-height: 1.43;
+ --text-body-sm--letter-spacing: -0.018em;
+ --text-body: 16px;
+ --text-body--line-height: 1.4;
+ --text-body--letter-spacing: -0.018em;
+ --text-subheading: 20px;
+ --text-subheading--line-height: 1.4;
+ --text-subheading--letter-spacing: -0.018em;
+ --text-heading-sm: 34px;
+ --text-heading-sm--line-height: 1.25;
+ --text-heading-sm--letter-spacing: -0.02em;
+ --text-heading: 54px;
+ --text-heading--line-height: 1;
+ --text-heading--letter-spacing: -0.023em;
+ --text-display: 84px;
+ --text-display--line-height: 1;
+ --text-display--letter-spacing: -0.04em;
+
+ /* Radii: pills only; cards/images stay sharp (rounded-none default) */
+ --radius-pill: 1440px;
+
+ /* Breakpoint matches the legacy 767/768 split (md: == desktop) */
+ --breakpoint-md: 768px;
+
+ /* Repo-standard ease */
+ --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+}
