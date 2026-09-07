@@ -24,32 +24,43 @@ const run = (cmd) => {
     return { ok: false, out: String(e.message ?? e) };
   }
 };
+// Exact class tokens from static class="..." attributes (no regex-substring
+// footguns: "service" must not match the kept hook "service-row").
+const tokens = (src) =>
+  [...src.matchAll(/class="([^"]*)"/g)]
+    .flatMap((m) => m[1].split(/\s+/).filter(Boolean));
 
-// Ticket-02 scope: nine index sections (Work/Team/Preloader/ServiceDetail
-// migrate in later tickets).
+// Ticket-02 scope: ten index sections (Work/Team/ServiceDetail/Backbar
+// migrate in later tickets; Preloader folded in here as index chrome).
 const MIGRATED = [
   "Nav", "Hero", "Marquee", "About", "Services",
-  "Live", "Cta", "Footer", "MenuOverlay",
+  "Live", "Cta", "Footer", "MenuOverlay", "Preloader",
 ];
 
-// Legacy classes whose only job was styling a migrated section: none may
-// survive in the migrated markup.
-const LEGACY_STYLE_CLASSES = [
-  "nav-lockup", "nav-mark", "nav-eyebrow", "nav-links", "menu-btn",
-  "hero-top", "hero-title", "hero-side", "hero-sub", "hero-ctas",
+// Pure-styling legacy classes: none may survive as a token in migrated
+// markup. Hook/state classes (section-title, hero-title, hero-side,
+// hero-frame, about-statement, about-band, about-band-overlay, about-photos,
+// service-row, live-card, parallax, cta-title, cta-strip, footer-word,
+// menu-link, menu-line, menu-mask, menu-meta, preloader, preloader-letter,
+// magnetic, line, line-mask, data-reveal, is-open, nav--hidden) stay by
+// design: component scripts and motion.js query them.
+const LEGACY_STYLE_CLASSES = new Set([
+  "nav", "nav-lockup", "nav-mark", "nav-eyebrow", "nav-links", "menu-btn",
+  "hero", "hero-top", "hero-sub", "hero-ctas",
   "hero-media", "hero-overlay", "hero-meta", "hero-overlay-title",
-  "marquee-track",
-  "about-statement", "about-band", "about-band-overlay", "about-band-meta",
-  "about-band-title", "about-lower", "about-copy", "about-photos", "fig-cap",
-  "services-list", "service", "service-num", "service-name", "service-arrow",
-  "services-preview",
-  "live-grid", "live-frame", "live-meta", "live-name",
-  "eyebrow-invert", "cta-title", "cta-sub", "cta-strip",
-  "footer-word", "footer-dot", "footer-grid", "footer-logo", "footer-tag",
+  "marquee", "marquee-track",
+  "about", "about-lower", "about-copy", "about-band-meta",
+  "about-band-title", "fig-cap",
+  "services", "services-list", "service", "service-num", "service-name",
+  "service-arrow", "services-preview",
+  "live", "live-grid", "live-frame", "live-meta", "live-name",
+  "cta", "eyebrow", "eyebrow-invert", "cta-sub",
+  "footer", "footer-dot", "footer-grid", "footer-logo", "footer-tag",
   "footer-head", "footer-col", "footer-base", "footer-brand",
-  "menu-top", "menu-brand", "menu-close", "menu-nav", "menu-link", "menu-meta",
+  "menu-overlay", "menu-top", "menu-brand", "menu-close", "menu-nav",
+  "preloader-word", "preloader-letter-last",
   "btn", "btn-accent", "btn-ghost", "btn-big",
-];
+]);
 
 // GSAP/JS hooks that must survive the migration (motion.js + component
 // scripts query these; ticket 02 keeps all existing motion working).
@@ -62,7 +73,8 @@ const HOOKS = [
   ["Live.svelte", ["section-title", "live-card", "parallax"]],
   ["Cta.svelte", ["cta-title", "cta-strip", "magnetic", "data-reveal"]],
   ["Footer.svelte", ["footer-word"]],
-  ["MenuOverlay.svelte", ["menu-locked", "menu-link", "menu-line", "is-open", "menu-meta"]],
+  ["MenuOverlay.svelte", ["menu-link", "menu-line", "is-open", "menu-meta"]],
+  ["Preloader.svelte", ["preloader", "preloader-letter"]],
 ];
 
 check("migrated sections use utilities, no legacy style classes", () => {
@@ -70,10 +82,8 @@ check("migrated sections use utilities, no legacy style classes", () => {
     const src = read(`src/sections/${s}.svelte`);
     must(/(?:^|\s)(?:bg-|text-|flex|grid|px-|py-|p-|m-|gap-|hidden|md:|fixed|absolute|relative|w-|max-w-|tracking-|leading-|font-|uppercase|rounded-|border)/m.test(src),
       `${s}.svelte shows no Tailwind utilities`);
-    for (const c of LEGACY_STYLE_CLASSES) {
-      const re = new RegExp(`class="[^"]*\\b${c}\\b`);
-      must(!re.test(src), `${s}.svelte still uses legacy .${c}`);
-    }
+    for (const t of tokens(src))
+      must(!LEGACY_STYLE_CLASSES.has(t), `${s}.svelte still uses legacy .${t}`);
   }
 });
 
@@ -84,13 +94,14 @@ check("motion hooks preserved", () => {
   }
 });
 
-check("shared primitives extracted (Pill, SectionTitle, Tag)", () => {
+check("shared primitives extracted and consumed (Pill, SectionTitle, Tag)", () => {
   for (const p of ["Pill.svelte", "SectionTitle.svelte", "Tag.svelte"])
     must(existsSync(`src/components/ui/${p}`), `src/components/ui/${p} missing`);
   const users = readdirSync("src/sections")
     .filter((f) => f.endsWith(".svelte"))
     .map((f) => read(`src/sections/${f}`)).join("\n");
-  must(users.includes("SectionTitle"), "no section consumes SectionTitle");
+  for (const p of ["Pill", "SectionTitle", "Tag"])
+    must(users.includes(`<${p}`), `no section consumes <${p}>`);
 });
 
 check("anchors and service links intact", () => {
@@ -114,6 +125,25 @@ check("clean build", () => {
   const b = run("npm run build");
   must(b.ok, `build failed: ${b.out.slice(-500)}`);
   must(existsSync("dist/index.html"), "dist/index.html missing after build");
+});
+
+check("utilities emitted in dist output", () => {
+  // NOTE: probes are built via join() so no bare utility literal lives in
+  // this file. Tailwind v4 scans every non-gitignored file including
+  // scripts/, so a literal here would seed its own emission and the check
+  // would pass vacuously. Constructed strings can only come from real
+  // markup in src/sections/.
+  const probes = [
+    ["bg", "navy-ink"].join("-"),
+    ["rounded", "pill"].join("-"),
+    [".text", "display"].join("-"),
+    ["max-md\\:", "hidden"].join(""),
+  ];
+  const cssFiles = readdirSync("dist/assets").filter((f) => f.endsWith(".css"));
+  must(cssFiles.length > 0, "no CSS emitted to dist/assets");
+  const css = cssFiles.map((f) => read(`dist/assets/${f}`)).join("\n");
+  for (const u of probes)
+    must(css.includes(u), `dist CSS lacks generated utility ${u}`);
 });
 
 if (failures) {
