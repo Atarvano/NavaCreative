@@ -1,8 +1,8 @@
 <script>
-  import Backbar from './components/Backbar.svelte';
-  import ServiceDetail from './components/ServiceDetail.svelte';
-  import Cta from './components/Cta.svelte';
-  import Footer from './components/Footer.svelte';
+  import Backbar from './sections/Backbar.svelte';
+  import ServiceDetail from './sections/ServiceDetail.svelte';
+  import Cta from './sections/Cta.svelte';
+  import Footer from './sections/Footer.svelte';
   import { SERVICES } from './lib/services.js';
 
   // One app for all five service pages; the entry HTML picks the page via

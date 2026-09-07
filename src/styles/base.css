@@ -1,0 +1,168 @@
+/* ==========================================================================
+   NAVA CREATIVE - base layer (ticket 01)
+   Global rules carried over from styles.css; values identical, zero visual
+   change. Section styles still live in styles.css until cutover (ticket 06).
+   Token vars (--color-*, --text-*, --font-*) resolve from the @theme block
+   in theme.css; only layout vars are declared here. The section padding
+   hardcodes 112px (was var(--spacing-112)) so base never depends on the
+   legacy sheet it is replacing.
+   ========================================================================== */
+
+:root {
+ --nav-h: 68px;
+ --pad: clamp(16px, 3vw, 32px);
+ --section-gap: 64px;
+
+ --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+ margin: 0;
+ padding: 0;
+ box-sizing: border-box;
+}
+
+html {
+ scroll-behavior: smooth;
+ scroll-padding-top: calc(var(--nav-h) + 1rem);
+}
+
+body {
+ background: var(--color-canvas);
+ color: var(--color-ink-black);
+ font-family: var(--font-sans);
+ font-size: var(--text-body);
+ font-weight: 400;
+ line-height: 1.4;
+ letter-spacing: -0.018em;
+ -webkit-font-smoothing: antialiased;
+ overflow-x: clip;
+}
+
+img {
+ display: block;
+ max-width: 100%;
+ height: auto;
+}
+a {
+ color: inherit;
+ text-decoration: none;
+}
+ul {
+ list-style: none;
+}
+figure {
+ overflow: hidden;
+}
+
+::selection {
+ background: var(--color-signal-yellow);
+ color: var(--color-ink-black);
+}
+a:focus-visible,
+li:focus-visible {
+ outline: 2px solid var(--color-ink-black);
+ outline-offset: 3px;
+}
+
+/* Weight discipline: display is ALWAYS 300 */
+h1,
+h2,
+h3 {
+ font-weight: 300;
+}
+
+section {
+ padding: clamp(64px, 11vh, 112px) var(--pad);
+}
+
+/* Masked line-reveal primitives (GSAP owns the motion via motion.js) */
+.line-mask {
+ display: block;
+ overflow: hidden;
+ padding-bottom: 0.1em;
+}
+.line {
+ display: inline-block;
+ will-change: transform;
+}
+
+/* --------------------------------------------------------------------------
+   Reveal initial states (JS animates to visible; no-JS/reduced shows content)
+   -------------------------------------------------------------------------- */
+/* Svelte shell: content renders statically until each component's animation
+   owns its own initial states. */
+body:not(.no-js):not(.reduced):not(.svelte-shell) [data-reveal] {
+ opacity: 0;
+ transform: translateY(28px);
+}
+body:not(.no-js):not(.reduced):not(.svelte-shell) .line-mask .line {
+ transform: translateY(115%);
+}
+body:not(.no-js):not(.reduced):not(.svelte-shell) .hero-frame {
+ clip-path: inset(0% 0% 100% 0%);
+}
+body:not(.no-js):not(.reduced):not(.svelte-shell) .hero-side > * {
+ opacity: 0;
+ transform: translateY(24px);
+}
+body.no-js .line,
+body.reduced .line,
+body.no-js [data-reveal],
+body.reduced [data-reveal],
+body.no-js .hero-side > *,
+body.reduced .hero-side > * {
+ opacity: 1 !important;
+ transform: none !important;
+}
+body.no-js .hero-frame,
+body.reduced .hero-frame {
+ clip-path: none !important;
+}
+
+body.menu-locked {
+ overflow: hidden;
+}
+
+/* Dedicated masks for menu links - never touched by the page-level line gate */
+.menu-mask {
+ display: block;
+ overflow: hidden;
+ padding-bottom: 0.08em;
+}
+.menu-line {
+ display: inline-block;
+ will-change: transform;
+}
+
+@media (max-width: 767px) {
+ :root {
+  --nav-h: 60px;
+  --pad: 20px;
+ }
+}
+
+/* Desktop-only preview layer */
+@media (pointer: coarse) {
+ .services-preview {
+  display: none;
+ }
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion: static page, everything visible
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+ html {
+  scroll-behavior: auto;
+ }
+ *,
+ *::before,
+ *::after {
+  animation: none !important;
+  transition: none !important;
+ }
+ .preloader {
+  display: none;
+ }
+}

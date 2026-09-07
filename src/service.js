@@ -1,5 +1,5 @@
 import { mount } from 'svelte';
-import '../styles.css';
+import './styles/theme.css';
 import ServiceApp from './ServiceApp.svelte';
 
 // Import the motion helper so gsap/ScrollTrigger register once per page and
