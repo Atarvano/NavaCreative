@@ -46,7 +46,7 @@
   });
 </script>
 
-<!-- CTA: the one inverted featured block + stills strip. 1:1 with legacy/index.html markup. -->
+<!-- CTA: the one inverted featured block + stills strip. -->
 <section class="cta" id="contact" bind:this={section}>
   <p class="eyebrow eyebrow-invert">Contact</p>
   <h2 class="cta-title">

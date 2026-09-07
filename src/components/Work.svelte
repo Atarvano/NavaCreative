@@ -2,11 +2,11 @@
   import { onMount, onDestroy } from 'svelte';
   import { gsap, motion } from '../lib/motion.js';
 
-  // Work portfolio: static markup 1:1 with legacy/index.html, plus the
-  // ADR-0003 desktop pin (exactly 100dvh, start top top, scrub, no
-  // anticipatePin) with horizontal cards and once-per-card rise. Mobile
-  // keeps the native snap carousel with fade-up cards. Owns its own title
-  // reveal with pinnedContainer so ticket 04's global sweep must skip .work.
+  // Work portfolio: static markup plus the ADR-0003 desktop pin (exactly
+  // 100dvh, start top top, scrub, no anticipatePin) with horizontal cards
+  // and once-per-card rise. Mobile keeps the native snap carousel with
+  // fade-up cards. Owns its own title reveal with pinnedContainer so the
+  // global sweep must skip .work.
   let section;
   let track;
   let ctx;
@@ -97,7 +97,7 @@
   });
 </script>
 
-<!-- Work: horizontal print portfolio. 1:1 with legacy/index.html markup. -->
+<!-- Work: horizontal print portfolio. -->
 <section class="work" id="work" bind:this={section}>
   <div class="work-head">
     <div>

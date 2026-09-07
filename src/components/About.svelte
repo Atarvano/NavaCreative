@@ -4,7 +4,7 @@
 
   // Statement line reveal + full-bleed band clip/settle + copy fade-up +
   // photo-pair rise. The band trigger fires once and drives all three
-  // band tweens off the same start, exactly like legacy.
+  // band tweens off the same start.
   let section;
   let ctx;
 
@@ -66,7 +66,7 @@
   onDestroy(() => ctx?.revert());
 </script>
 
-<!-- About: statement + full-bleed BTS band with Caption plate + copy/photo pair. 1:1 with legacy/index.html markup. -->
+<!-- About: statement + full-bleed BTS band with Caption plate + copy/photo pair. -->
 <section class="about" id="about" bind:this={section}>
   <p class="eyebrow">About</p>
   <h2 class="about-statement">

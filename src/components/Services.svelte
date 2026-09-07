@@ -4,7 +4,7 @@
 
   // Heading line reveal + row cascade; desktop adds the cursor-follow
   // preview with quickTo, cleaned up by the AbortController on breakpoint
-  // revert. Preview borrows the service-row data-img swap from legacy.
+  // revert. Preview borrows the service-row data-img swap.
   let section;
   let ctx;
   let mm;
@@ -62,7 +62,7 @@
   });
 </script>
 
-<!-- Services: editorial index of the five Service pages. 1:1 with legacy/index.html markup. -->
+<!-- Services: editorial index of the five Service pages. -->
 <section class="services" id="services" bind:this={section}>
   <h2 class="section-title">
     <span class="line-mask"><span class="line">What we do</span></span>

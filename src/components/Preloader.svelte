@@ -59,7 +59,7 @@
   });
 </script>
 
-<!-- Preloader: NAVA wordmark lift. 1:1 with legacy/index.html markup. -->
+<!-- Preloader: NAVA wordmark lift. -->
 <div class="preloader" id="preloader" aria-hidden="true" bind:this={el}>
   <div class="preloader-word">
     <span class="preloader-letter">N</span>

@@ -19,7 +19,7 @@
   onDestroy(() => ctx?.revert());
 </script>
 
-<!-- Footer: colophon. 1:1 with legacy/index.html markup. -->
+<!-- Footer: colophon. -->
 <footer class="footer" bind:this={footer}>
   <p class="footer-word" aria-hidden="true"><span class="line-mask"><span class="line">Nava Creative<i class="footer-dot"></i></span></span></p>
   <div class="footer-grid">

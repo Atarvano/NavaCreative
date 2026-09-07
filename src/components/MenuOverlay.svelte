@@ -11,7 +11,7 @@
   let ctx;
   let tl;
 
-  // Mirror legacy setMenu: lock body scroll while the overlay is open.
+  // Lock body scroll while the overlay is open.
   $effect(() => {
     document.body.classList.toggle('menu-locked', open);
     return () => document.body.classList.remove('menu-locked');
@@ -58,7 +58,7 @@
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape' && open) onclose?.(); }} />
 
-<!-- Menu overlay: full-screen Navy Ink nav (mobile only). 1:1 with legacy/index.html markup. -->
+<!-- Menu overlay: full-screen Navy Ink nav (mobile only). -->
 <div class="menu-overlay" id="menuOverlay" class:is-open={open} aria-hidden={String(!open)} bind:this={overlay}>
   <div class="menu-top">
     <p class="menu-brand">Nava Creative</p>

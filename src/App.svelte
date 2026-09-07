@@ -12,7 +12,7 @@
   import Footer from './components/Footer.svelte';
   import MenuOverlay from './components/MenuOverlay.svelte';
 
-  // Ticket 04: preloader owns the intro gate and plays the hero's paused
+  // Preloader owns the intro gate and plays the hero's paused
   // timeline when it lifts (or immediately under reduced motion).
   let menuOpen = $state(false);
   let hero;

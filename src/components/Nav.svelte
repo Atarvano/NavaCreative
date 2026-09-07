@@ -32,7 +32,7 @@
   onDestroy(() => ctx?.revert());
 </script>
 
-<!-- Nav: editorial lockup + inline links + mobile Menu pill. 1:1 with legacy/index.html markup. -->
+<!-- Nav: editorial lockup + inline links + mobile Menu pill. -->
 <header class="nav" id="nav" bind:this={header}>
   <a class="nav-lockup" href="#home">
     <span class="nav-mark" aria-hidden="true"></span>

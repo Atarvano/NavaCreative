@@ -4,7 +4,7 @@
 
   // Heading line reveal everywhere; desktop adds the sticky stack (each
   // card pins until the last arrives, pinSpacing false, with a scale/fade
-  // as the next card covers it) — canonical legacy geometry.
+  // as the next card covers it).
   let section;
   let ctx;
   let mm;
@@ -49,7 +49,7 @@
   });
 </script>
 
-<!-- Team: the four Makers. 1:1 with legacy/index.html markup. -->
+<!-- Team: the four Makers. -->
 <section class="team" id="team" bind:this={section}>
   <h2 class="section-title team-title">
     <span class="line-mask"><span class="line">Meet the makers</span></span>

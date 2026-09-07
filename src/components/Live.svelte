@@ -3,7 +3,7 @@
   import { gsap, motion, lines } from '../lib/motion.js';
 
   // Heading line reveal + card cascade; desktop adds the parallax scrub
-  // on each frame's img (triggered off the .parallax wrapper, like legacy).
+  // on each frame's img (triggered off the .parallax wrapper).
   let section;
   let ctx;
   let mm;
@@ -53,7 +53,7 @@
   });
 </script>
 
-<!-- Live: event records grid. 1:1 with legacy/index.html markup. -->
+<!-- Live: event records grid. -->
 <section class="live" id="live" bind:this={section}>
   <h2 class="section-title">
     <span class="line-mask"><span class="line">Live &amp; documented</span></span>

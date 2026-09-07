@@ -25,7 +25,7 @@
   onDestroy(() => ctx?.revert());
 </script>
 
-<!-- Back bar: icon-only back link + lockup. No nav links, no Menu button, no overlay. 1:1 with legacy service pages. -->
+<!-- Back bar: icon-only back link + lockup. No nav links, no Menu button, no overlay. -->
 <header class="backbar" id="backbar" bind:this={header}>
   <a class="backbar-back" href="index.html#services" aria-label="All services">←</a>
   <a class="nav-lockup" href="index.html">

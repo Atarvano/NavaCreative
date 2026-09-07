@@ -7,8 +7,8 @@ import App from './App.svelte';
 import './lib/motion.js';
 
 // Marks the Svelte shell so the stylesheet releases the reveal-gated initial
-// states (lines visible, hero frame unclipped). Each component's ticket-04
-// animation will own its own initial states via fromTo + immediateRender.
+// states (lines visible, hero frame unclipped). Each component's animation
+// will own its own initial states via fromTo + immediateRender.
 document.body.classList.add('svelte-shell');
 
 mount(App, { target: document.getElementById('app') });

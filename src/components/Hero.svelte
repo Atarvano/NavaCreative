@@ -60,7 +60,7 @@
   });
 </script>
 
-<!-- Hero: editorial manifesto + full-bleed photo band + Caption plate. 1:1 with legacy/index.html markup. -->
+<!-- Hero: editorial manifesto + full-bleed photo band + Caption plate. -->
 <section class="hero" id="home" bind:this={section}>
   <div class="hero-top">
     <h1 class="hero-title">

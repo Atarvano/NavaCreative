@@ -2,10 +2,9 @@
   import { onMount, onDestroy } from 'svelte';
   import { gsap, motion, lines, reveals } from '../lib/motion.js';
 
-  // Statement + related Work/Live gallery + cross-links. 1:1 with the legacy
-  // service pages: .live-card reuse, h2 names, lazy imgs with dimensions.
-  // Motion mirrors the legacy sweep for these selectors: title line reveal,
-  // lede fade-up, per-card cascade (no parallax on service pages).
+  // Statement + related Work/Live gallery + cross-links (.live-card reuse,
+  // h2 names, lazy imgs with dimensions). Title line reveal, lede fade-up,
+  // per-card cascade (no parallax on service pages).
   let { service, others = [] } = $props();
 
   let section;
