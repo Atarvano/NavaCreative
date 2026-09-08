@@ -32,8 +32,11 @@
 </script>
 
 <!-- Marquee: service ticker (JS quadruples the track). -->
-<div class="marquee" aria-hidden="true">
-  <div class="marquee-track" id="marqueeTrack" bind:this={track}>
-    <span>Video Editing</span><i></i><span>Photography</span><i></i><span>Graphic Design</span><i></i><span>Live Streaming</span><i></i><span>Photoshoot</span><i></i><span>Social Media</span><i></i>
+<div aria-hidden="true" class="overflow-hidden border-y border-ash py-8 whitespace-nowrap">
+  <div id="marqueeTrack" bind:this={track} class="inline-flex items-center will-change-transform">
+    <span class="px-6 text-subheading font-light">Video Editing</span><i class="h-2 w-2 flex-none"></i><span class="px-6 text-subheading font-light">Photography</span><i class="h-2 w-2 flex-none"></i><span class="px-6 text-subheading font-light">Graphic Design</span><i class="h-2 w-2 flex-none"></i><span class="px-6 text-subheading font-light">Live Streaming</span><i class="h-2 w-2 flex-none"></i><span class="px-6 text-subheading font-light">Photoshoot</span><i class="h-2 w-2 flex-none"></i><span class="px-6 text-subheading font-light">Social Media</span><i class="h-2 w-2 flex-none"></i>
+    <!-- Dots intentionally unpainted: the legacy i:nth-child(4n+1/4n+3)
+         selectors only ever matched odd children (spans), so no <i> was
+         colored and dots rendered as transparent gaps. Revisit in 04. -->
   </div>
 </div>

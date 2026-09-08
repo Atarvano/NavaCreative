@@ -67,34 +67,34 @@
 </script>
 
 <!-- About: statement + full-bleed BTS band with Caption plate + copy/photo pair. -->
-<section class="about" id="about" bind:this={section}>
-  <p class="eyebrow">About</p>
-  <h2 class="about-statement">
+<section id="about" bind:this={section}>
+  <p class="mb-12 text-caption text-graphite uppercase">About</p>
+  <h2 class="about-statement mb-16 max-w-[26ch] text-heading-sm leading-[1.25] font-light">
     <span class="line-mask"><span class="line">We are the makers</span></span>
     <span class="line-mask"><span class="line">behind the lens, the edit,</span></span>
     <span class="line-mask"><span class="line">and the moment.</span></span>
   </h2>
-  <div class="about-band">
-    <img src="./img/about-set.jpg" alt="Production set in progress" width="2048" height="1366" loading="lazy" />
-    <div class="about-band-overlay">
-      <p class="about-band-meta">Behind the scenes // Production diary</p>
-      <p class="about-band-title">The makers at work.</p>
+  <div class="about-band relative mx-[calc(var(--pad)*-1)] overflow-hidden">
+    <img src="./img/about-set.jpg" alt="Production set in progress" width="2048" height="1366" loading="lazy" class="h-[56vh] min-h-[320px] w-full object-cover" />
+    <div class="about-band-overlay absolute bottom-12 left-8 z-1 block w-fit max-w-[min(560px,80%)] bg-bone-white px-6 py-4 text-ink-black max-md:bottom-4 max-md:left-4">
+      <p class="mb-2 text-caption text-graphite uppercase">Behind the scenes // Production diary</p>
+      <p class="text-heading-sm leading-[1.25] font-light">The makers at work.</p>
     </div>
   </div>
-  <div class="about-lower">
-    <p class="about-copy" data-reveal>
+  <div class="mt-16 grid grid-cols-[5fr_7fr] items-start gap-16 max-md:mt-12 max-md:grid-cols-1 max-md:gap-12">
+    <p data-reveal class="max-w-[30ch] text-subheading font-light text-graphite sticky top-[calc(var(--nav-h)_+_32px)] max-md:static max-md:max-w-none">
       Based in Batam, we handle video editing, photo and video documentation,
       photoshoots, product photography, social media handling, graphic design,
       and live streaming. Open to discussion, flexible with budgeting.
     </p>
-    <div class="about-photos">
+    <div class="about-photos grid grid-cols-2 items-start gap-6">
       <figure>
-        <img src="./img/about-crew.jpg" alt="Nava Creative crew on location" width="2400" height="1350" loading="lazy" />
-        <figcaption class="fig-cap">The crew on location.</figcaption>
+        <img src="./img/about-crew.jpg" alt="Nava Creative crew on location" width="2400" height="1350" loading="lazy" class="aspect-[4/5] w-full object-cover" />
+        <figcaption class="mt-2 text-caption text-graphite">The crew on location.</figcaption>
       </figure>
-      <figure>
-        <img src="./img/about-cam.jpg" alt="Camera gear ready for a shoot" width="2400" height="1600" loading="lazy" />
-        <figcaption class="fig-cap">Kit checked before the call time.</figcaption>
+      <figure class="mt-16 max-md:mt-8">
+        <img src="./img/about-cam.jpg" alt="Camera gear ready for a shoot" width="2400" height="1600" loading="lazy" class="aspect-[3/4] w-full object-cover" />
+        <figcaption class="mt-2 text-caption text-graphite">Kit checked before the call time.</figcaption>
       </figure>
     </div>
   </div>
