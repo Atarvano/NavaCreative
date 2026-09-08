@@ -1,11 +1,10 @@
 /* ==========================================================================
-   NAVA CREATIVE - base layer (ticket 01)
-   Global rules carried over from styles.css; values identical, zero visual
-   change. Section styles still live in styles.css until cutover (ticket 06).
-   Token vars (--color-*, --text-*, --font-*) resolve from the @theme block
-   in theme.css; only layout vars are declared here. The section padding
-   hardcodes 112px (was var(--spacing-112)) so base never depends on the
-   legacy sheet it is replacing.
+   NAVA CREATIVE - base layer (ticket 01, cutover ticket 06)
+   Global rules carried over from the deleted styles.css; values identical,
+   zero visual change. Token vars (--color-*, --text-*, --font-*) resolve
+   from the @theme block in theme.css; only layout vars are declared here.
+   The section padding hardcodes 112px (was var(--spacing-112)) so base
+   never depended on the legacy sheet.
    ========================================================================== */
 
 :root {
@@ -124,6 +123,14 @@ body.menu-locked {
  overflow: hidden;
 }
 
+/* Hide-on-scroll chrome (Nav + Back bar): JS toggles the class inside
+   a ScrollTrigger callback, so component-scoped styles would be
+   tree-shaken (no static markup match) — global like .menu-locked. */
+.nav--hidden,
+.backbar--hidden {
+ transform: translateY(-100%);
+}
+
 /* Dedicated masks for menu links - never touched by the page-level line gate */
 .menu-mask {
  display: block;
@@ -152,6 +159,12 @@ body.menu-locked {
 /* --------------------------------------------------------------------------
    Reduced motion: static page, everything visible
    -------------------------------------------------------------------------- */
+/* no-js / JS-disabled gates (were in the legacy sheet; kept here so the
+   preloader can never trap the page once styles.css is deleted) */
+body.no-js .preloader,
+body.reduced .preloader {
+ display: none;
+}
 @media (prefers-reduced-motion: reduce) {
  html {
   scroll-behavior: auto;

@@ -1,20 +1,14 @@
 /* ==========================================================================
    NAVA CREATIVE - Tailwind v4 theme ("Creative Giants" tokens, design.md)
-   No reset import: the repo carries its own reset + base in ./base.css, so
-   no reset ever shifts legacy selectors. The legacy sheet rides in a
-   `legacy` layer below utilities (deleted at cutover, ticket 06), so from
-   ticket 02 on migrated utilities verifiably win over legacy rules.
-   Spacing uses the v4 dynamic scale: 8px = *-2, 16px = *-4, 24px = *-6,
-   32px = *-8, 48px = *-12, 64px = *-16, 80px = *-20, 112px = *-28.
-   Fluid page padding stays a plain var (--pad), used via arbitrary values
-   (e.g. px-(--pad)). Tracking values follow styles.css (em), not the px
-   typo in design.md's scale table.
+   Reset + base live in ./base.css. Spacing uses the v4 dynamic scale:
+   8px = *-2, 16px = *-4, 24px = *-6, 32px = *-8, 48px = *-12, 64px = *-16,
+   80px = *-20, 112px = *-28. Fluid page padding stays a plain var (--pad),
+   used via arbitrary values (e.g. px-(--pad)). Tracking follows design.md.
    ========================================================================== */
 
-@layer theme, legacy, base, components, utilities;
+@layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);
-@import "../../styles.css" layer(legacy);
 @import "./base.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
 

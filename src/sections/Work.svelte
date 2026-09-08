@@ -12,8 +12,8 @@
   // JS branches always agree with the md: utilities (the old 769/768 split
   // left 768px wide running the mobile branch under desktop CSS: no pin).
   // The title stays a raw h2, not SectionTitle: the head budget needs its
-  // bottom margin at exactly 0, and utilities already win over the legacy
-  // layer without an !important fight against SectionTitle's scoped style.
+  // bottom margin at exactly 0, and utilities already beat
+  // SectionTitle's scoped style without an !important fight.
   let section;
   let track;
   let ctx;
