@@ -26,10 +26,10 @@
 </script>
 
 <!-- Back bar: icon-only back link + lockup. No nav links, no Menu button, no overlay. -->
-<header class="backbar" id="backbar" bind:this={header}>
-  <a class="backbar-back" href="index.html#services" aria-label="All services">←</a>
-  <a class="nav-lockup" href="index.html">
-    <span class="nav-mark" aria-hidden="true"></span>
-    <span class="nav-eyebrow">Nava Creative //<br />Photo & Video Studio</span>
+<header class="fixed inset-x-0 top-0 z-50 flex h-(--nav-h) items-center justify-between gap-8 px-(--pad) transition-transform duration-450 ease-emphasis [.backbar--hidden&]:-translate-y-full" id="backbar" bind:this={header}>
+  <a class="inline-flex min-h-11 min-w-11 items-center justify-center text-body text-graphite transition-colors duration-200 hover:text-ink-black" href="index.html#services" aria-label="All services">←</a>
+  <a class="inline-flex items-center gap-3" href="index.html">
+    <span aria-hidden="true" class="relative h-8 w-8 flex-none rounded-full bg-ink-black after:absolute after:inset-0 after:m-auto after:h-2 after:w-2 after:rounded-full after:bg-bone-white"></span>
+    <span class="text-caption leading-[1.43] text-ink-black uppercase">Nava Creative //<br />Photo & Video Studio</span>
   </a>
 </header>
