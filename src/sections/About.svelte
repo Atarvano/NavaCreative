@@ -2,9 +2,11 @@
   import { onMount, onDestroy } from 'svelte';
   import { gsap, motion, lines, reveals } from '../lib/motion.js';
 
-  // Statement line reveal + full-bleed band clip/settle + copy fade-up +
-  // photo-pair rise. The band trigger fires once and drives all three
-  // band tweens off the same start.
+  // Statement line reveal + full-bleed band clip/settle + band parallax
+  // (the -7/+7 scrub shared with Live frames)
+  // + copy fade-up + photo-pair rise. One once:true trigger (top 80%)
+  // drives the clip, settle, and Caption plate tweens; a separate scrub
+  // drives the parallax.
   let section;
   let ctx;
 
@@ -44,6 +46,20 @@
           stagger: 0.1,
           delay: 0.5,
           scrollTrigger: { trigger: band, start: 'top 80%', once: true },
+        }
+      );
+      gsap.fromTo(
+        band.querySelector('img'),
+        { yPercent: -7 },
+        {
+          yPercent: 7,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: band,
+            start: 'top bottom',
+            end: 'bottom top',
+            scrub: true,
+          },
         }
       );
       section.querySelectorAll('.about-photos figure').forEach((fig, i) => {
