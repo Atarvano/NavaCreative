@@ -1,12 +1,19 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { gsap, motion } from '../lib/motion.js';
+  import Tag from '../components/ui/Tag.svelte';
 
-  // Work portfolio: static markup plus the ADR-0003 desktop pin (exactly
-  // 100dvh, start top top, scrub, no anticipatePin) with horizontal cards
-  // and once-per-card rise. Mobile keeps the native snap carousel with
-  // fade-up cards. Owns its own title reveal with pinnedContainer so the
-  // global sweep must skip .work.
+  // Work portfolio in Tailwind: static markup plus the ADR-0003 desktop pin
+  // (exactly 100dvh, start top top, scrub, no anticipatePin) with
+  // horizontal cards and once-per-card rise. Mobile keeps the native snap
+  // carousel with fade-up cards. Owns its own title reveal with
+  // pinnedContainer so the global sweep must skip .work.
+  // Breakpoints sit on the theme md split (768 desktop / 767 mobile) so the
+  // JS branches always agree with the md: utilities (the old 769/768 split
+  // left 768px wide running the mobile branch under desktop CSS: no pin).
+  // The title stays a raw h2, not SectionTitle: the head budget needs its
+  // bottom margin at exactly 0, and utilities already win over the legacy
+  // layer without an !important fight against SectionTitle's scoped style.
   let section;
   let track;
   let ctx;
@@ -36,7 +43,7 @@
 
       // Desktop pin: cards travel horizontally while the section holds one
       // viewport. invalidateOnRefresh keeps the distance honest on resize.
-      mm.add('(min-width: 769px)', () => {
+      mm.add('(min-width: 768px)', () => {
         const distance = () => track.scrollWidth - window.innerWidth;
         const scrollTween = gsap.to(track, {
           x: () => -distance(),
@@ -71,7 +78,7 @@
       });
 
       // Mobile: no pin, cards fade up in the snap carousel.
-      mm.add('(max-width: 768px)', () => {
+      mm.add('(max-width: 767px)', () => {
         section.querySelectorAll('.work-card').forEach((card) => {
           gsap.fromTo(
             card,
@@ -98,56 +105,56 @@
 </script>
 
 <!-- Work: horizontal print portfolio. -->
-<section class="work" id="work" bind:this={section}>
-  <div class="work-head">
+<section class="work px-0 md:h-[100dvh] md:overflow-hidden md:p-0" id="work" bind:this={section}>
+  <div class="mb-12 flex items-end justify-between gap-8 px-(--pad) md:mb-6 md:pt-[calc(var(--nav-h)_+_24px)]">
     <div>
-      <p class="eyebrow">Work</p>
-      <h2 class="section-title">
+      <p class="mb-12 text-caption text-graphite uppercase">Work</p>
+      <h2 class="section-title mb-0 text-heading font-light max-md:text-[clamp(2rem,8.5vw,3rem)] max-md:tracking-[-0.02em]">
         <span class="line-mask"><span class="line">Selected work</span></span>
       </h2>
     </div>
-    <p class="work-hint">Photo &amp; video productions</p>
+    <p class="text-caption text-graphite uppercase">Photo &amp; video productions</p>
   </div>
-  <div class="work-track" id="workTrack" bind:this={track}>
-    <article class="work-card work-card-l">
-      <figure class="work-frame"><img src="img/pv-ihsan-ochi.jpg" alt="Prewedding portrait of Ihsan and Ochi" width="1200" height="1800" loading="lazy" /></figure>
-      <p class="work-meta">Photo Prewedding</p>
-      <h3 class="work-name">Ihsan &amp; Ochi</h3>
+  <div class="flex items-end gap-12 px-(--pad) pb-4 will-change-transform max-md:snap-x max-md:snap-mandatory max-md:overflow-x-auto md:pb-8" id="workTrack" bind:this={track}>
+    <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
+      <figure class="aspect-[3/4] w-full md:aspect-[3/2] md:h-[min(44vh,460px)] md:w-auto"><img src="img/pv-ihsan-ochi.jpg" alt="Prewedding portrait of Ihsan and Ochi" width="1200" height="1800" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
+      <Tag class="mt-4">Photo Prewedding</Tag>
+      <h3 class="mt-2 text-subheading font-light">Ihsan &amp; Ochi</h3>
     </article>
-    <article class="work-card work-card-s">
-      <figure class="work-frame"><img src="img/pv-banda-neira.jpg" alt="Banda Neira on stage" width="1080" height="1350" loading="lazy" /></figure>
-      <p class="work-meta">Stage Photography</p>
-      <h3 class="work-name">Banda Neira</h3>
+    <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
+      <figure class="aspect-[3/4] w-full md:h-[min(44vh,460px)] md:w-auto"><img src="img/pv-banda-neira.jpg" alt="Banda Neira on stage" width="1080" height="1350" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
+      <Tag class="mt-4">Stage Photography</Tag>
+      <h3 class="mt-2 text-subheading font-light">Banda Neira</h3>
     </article>
-    <article class="work-card work-card-s">
-      <figure class="work-frame"><img src="img/pv-tsenja.jpg" alt="Tsenja photoshoot" width="1600" height="2400" loading="lazy" /></figure>
-      <p class="work-meta">Photoshoot</p>
-      <h3 class="work-name">Tsenja</h3>
+    <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
+      <figure class="aspect-[3/4] w-full md:h-[min(44vh,460px)] md:w-auto"><img src="img/pv-tsenja.jpg" alt="Tsenja photoshoot" width="1600" height="2400" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
+      <Tag class="mt-4">Photoshoot</Tag>
+      <h3 class="mt-2 text-subheading font-light">Tsenja</h3>
     </article>
-    <article class="work-card work-card-s">
-      <figure class="work-frame"><img src="img/pv-stage.jpg" alt="Stage performance photography" width="1600" height="2400" loading="lazy" /></figure>
-      <p class="work-meta">Stage Photography</p>
-      <h3 class="work-name">Rissau</h3>
+    <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
+      <figure class="aspect-[3/4] w-full md:h-[min(44vh,460px)] md:w-auto"><img src="img/pv-stage.jpg" alt="Stage performance photography" width="1600" height="2400" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
+      <Tag class="mt-4">Stage Photography</Tag>
+      <h3 class="mt-2 text-subheading font-light">Rissau</h3>
     </article>
-    <article class="work-card work-card-l">
-      <figure class="work-frame"><img src="img/pv-event.jpg" alt="Event photography coverage" width="2400" height="1600" loading="lazy" /></figure>
-      <p class="work-meta">Event Photography</p>
-      <h3 class="work-name">Amsakar Cup II</h3>
+    <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
+      <figure class="aspect-[3/4] w-full md:aspect-[3/2] md:h-[min(44vh,460px)] md:w-auto"><img src="img/pv-event.jpg" alt="Event photography coverage" width="2400" height="1600" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
+      <Tag class="mt-4">Event Photography</Tag>
+      <h3 class="mt-2 text-subheading font-light">Amsakar Cup II</h3>
     </article>
-    <article class="work-card work-card-s">
-      <figure class="work-frame"><img src="img/gd-double-g.jpg" alt="Graphic design work for Double G" width="1599" height="2400" loading="lazy" /></figure>
-      <p class="work-meta">Graphic Design</p>
-      <h3 class="work-name">Double G</h3>
+    <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
+      <figure class="aspect-[3/4] w-full md:h-[min(44vh,460px)] md:w-auto"><img src="img/gd-double-g.jpg" alt="Graphic design work for Double G" width="1599" height="2400" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
+      <Tag class="mt-4">Graphic Design</Tag>
+      <h3 class="mt-2 text-subheading font-light">Double G</h3>
     </article>
-    <article class="work-card work-card-s">
-      <figure class="work-frame"><img src="img/pv-ceremony.jpg" alt="Ceremony photography" width="1200" height="1800" loading="lazy" /></figure>
-      <p class="work-meta">Photo &amp; Video</p>
-      <h3 class="work-name">Titik Ngopi</h3>
+    <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
+      <figure class="aspect-[3/4] w-full md:h-[min(44vh,460px)] md:w-auto"><img src="img/pv-ceremony.jpg" alt="Ceremony photography" width="1200" height="1800" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
+      <Tag class="mt-4">Photo &amp; Video</Tag>
+      <h3 class="mt-2 text-subheading font-light">Titik Ngopi</h3>
     </article>
-    <article class="work-card work-card-s">
-      <figure class="work-frame"><img src="img/pv-crowd.jpg" alt="Crowd during a live event" width="1200" height="1800" loading="lazy" /></figure>
-      <p class="work-meta">Event Documentation</p>
-      <h3 class="work-name">Perry Pet Shop</h3>
+    <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
+      <figure class="aspect-[3/4] w-full md:h-[min(44vh,460px)] md:w-auto"><img src="img/pv-crowd.jpg" alt="Crowd during a live event" width="1200" height="1800" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
+      <Tag class="mt-4">Event Documentation</Tag>
+      <h3 class="mt-2 text-subheading font-light">Perry Pet Shop</h3>
     </article>
   </div>
 </section>
