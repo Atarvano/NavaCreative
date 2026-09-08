@@ -19,28 +19,43 @@ const must = (cond, msg) => {
 const read = (p) => readFileSync(p, "utf8");
 const run = (cmd) => {
   try {
-    return { ok: true, out: execSync(cmd, { encoding: "utf8", stdio: "pipe" }) };
+    return {
+      ok: true,
+      out: execSync(cmd, { encoding: "utf8", stdio: "pipe" }),
+    };
   } catch (e) {
     return { ok: false, out: String(e.message ?? e) };
   }
 };
 // Exact class tokens from static class="..." attributes.
 const tokens = (src) =>
-  [...src.matchAll(/class="([^"]*)"/g)]
-    .flatMap((m) => m[1].split(/\s+/).filter(Boolean));
+  [...src.matchAll(/class="([^"]*)"/g)].flatMap((m) =>
+    m[1].split(/\s+/).filter(Boolean),
+  );
 
 // Pure-styling legacy classes: none may survive as a token in Work markup.
 // Kept hooks (queried by the component script or motion.js): work,
 // work-card, section-title, line, line-mask.
 const LEGACY_STYLE_CLASSES = new Set([
-  "work-head", "work-hint", "work-track", "work-frame",
-  "work-card-l", "work-card-s", "work-meta", "work-name", "eyebrow",
+  "work-head",
+  "work-hint",
+  "work-track",
+  "work-frame",
+  "work-card-l",
+  "work-card-s",
+  "work-meta",
+  "work-name",
+  "eyebrow",
 ]);
 
 check("Work uses utilities, no legacy style classes", () => {
   const src = read("src/sections/Work.svelte");
-  must(/(?:^|\s)(?:flex|grid|px-|py-|p-|m-|gap-|md:|max-md:|aspect-|snap-|overflow-|h-|w-|will-change)/m.test(src),
-    "Work.svelte shows no Tailwind utilities");
+  must(
+    /(?:^|\s)(?:flex|grid|px-|py-|p-|m-|gap-|md:|max-md:|aspect-|snap-|overflow-|h-|w-|will-change)/m.test(
+      src,
+    ),
+    "Work.svelte shows no Tailwind utilities",
+  );
   for (const t of tokens(src))
     must(!LEGACY_STYLE_CLASSES.has(t), `Work.svelte still uses legacy .${t}`);
 });
@@ -53,8 +68,14 @@ check("GSAP hooks preserved on new markup", () => {
 
 check("work-meta migrated to shared Tag", () => {
   const src = read("src/sections/Work.svelte");
-  must(src.includes("../components/ui/Tag.svelte"), "Work.svelte does not import Tag");
-  must((src.match(/<Tag/g) || []).length >= 8, "expected 8 <Tag> work-meta labels");
+  must(
+    src.includes("../components/ui/Tag.svelte"),
+    "Work.svelte does not import Tag",
+  );
+  must(
+    (src.match(/<Tag/g) || []).length >= 8,
+    "expected 8 <Tag> work-meta labels",
+  );
 });
 
 check("breakpoint split aligned to theme md (768/767)", () => {
@@ -77,7 +98,10 @@ check("ADR-0003 pin geometry in markup and script", () => {
 check("motion.js untouched", () => {
   const git = run("git diff --name-only main...HEAD");
   must(git.ok, `git diff failed: ${git.out}`);
-  must(!git.out.includes("src/lib/motion.js"), "motion.js must stay untouched in ticket 03");
+  must(
+    !git.out.includes("src/lib/motion.js"),
+    "motion.js must stay untouched in ticket 03",
+  );
 });
 
 check("clean build", () => {
