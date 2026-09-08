@@ -107,16 +107,21 @@ for (const p of PAGES) {
         })
         .join("/"),
       settled: cards.map((c) => getComputedStyle(c).opacity),
-      others: [...document.querySelectorAll('nav[aria-label="Other services"] a')]
-        .map((a) => a.getAttribute("href")),
+      others: [
+        ...document.querySelectorAll('nav[aria-label="Other services"] a'),
+      ].map((a) => a.getAttribute("href")),
     };
   });
   if (snap.backbar) ok(`desktop ${p}: back bar renders`);
   else fail(`desktop ${p}: back bar missing`);
   if (snap.cards >= 3 && snap.cols === 3)
     ok(`desktop ${p}: gallery renders ${snap.cards} cards in 3 columns`);
-  else fail(`desktop ${p}: gallery wrong (cards ${snap.cards}, cols ${snap.cols})`);
-  if (snap.cta) fail(`desktop ${p}: CTA strip still present`); else ok(`desktop ${p}: no CTA strip`);
+  else
+    fail(
+      `desktop ${p}: gallery wrong (cards ${snap.cards}, cols ${snap.cols})`,
+    );
+  if (snap.cta) fail(`desktop ${p}: CTA strip still present`);
+  else ok(`desktop ${p}: no CTA strip`);
   if (snap.footer) ok(`desktop ${p}: footer renders`);
   else fail(`desktop ${p}: footer missing`);
   if (snap.settled.every((o) => o === "1"))
@@ -128,9 +133,12 @@ for (const p of PAGES) {
 
   // Back link + one anchor resolve.
   const backHref = await page.evaluate(() =>
-    document.querySelector('#backbar a[aria-label="All services"]').getAttribute("href"),
+    document
+      .querySelector('#backbar a[aria-label="All services"]')
+      .getAttribute("href"),
   );
-  if (backHref === "index.html#services") ok(`desktop ${p}: back link -> All services`);
+  if (backHref === "index.html#services")
+    ok(`desktop ${p}: back link -> All services`);
   else fail(`desktop ${p}: back link href = ${backHref}`);
   if (p === "photo-video.html")
     await page.screenshot({ path: join(SHOTS, "05-desktop-service.png") });
@@ -161,7 +169,9 @@ for (const p of PAGES) {
   });
   const mob = await page.evaluate(() => {
     const cards = [...document.querySelectorAll("#service-detail .live-card")];
-    const widths = new Set(cards.map((c) => Math.round(c.getBoundingClientRect().width)));
+    const widths = new Set(
+      cards.map((c) => Math.round(c.getBoundingClientRect().width)),
+    );
     return {
       cols: getComputedStyle(
         document.querySelector("#service-detail .grid"),
@@ -173,7 +183,8 @@ for (const p of PAGES) {
   });
   if (mob.cols === 1 && mob.stacked) ok("mobile gallery stacks full-width");
   else fail(`mobile gallery layout wrong: ${JSON.stringify(mob)}`);
-  if (mob.cta) fail("mobile CTA strip present"); else ok("mobile no CTA strip");
+  if (mob.cta) fail("mobile CTA strip present");
+  else ok("mobile no CTA strip");
   if (mob.settled.every((o) => o === "1")) ok("mobile gallery cascade fired");
   else fail(`mobile cards unsettled: ${mob.settled.join(",")}`);
   await page.screenshot({ path: join(SHOTS, "05-mobile-service.png") });
@@ -200,13 +211,16 @@ for (const p of PAGES) {
     const cards = [...document.querySelectorAll("#service-detail .live-card")];
     return {
       visible: cards.every((c) => getComputedStyle(c).opacity === "1"),
-      title: getComputedStyle(document.querySelector(".service-title .line")).opacity,
+      title: getComputedStyle(document.querySelector(".service-title .line"))
+        .opacity,
       cta: !!document.querySelector("#contact"),
     };
   });
-  if (rm.visible && rm.title === "1") ok("reduced-motion renders gallery + title statically");
+  if (rm.visible && rm.title === "1")
+    ok("reduced-motion renders gallery + title statically");
   else fail(`reduced-motion content hidden: ${JSON.stringify(rm)}`);
-  if (rm.cta) fail("reduced-motion CTA strip present"); else ok("reduced-motion no CTA strip");
+  if (rm.cta) fail("reduced-motion CTA strip present");
+  else ok("reduced-motion no CTA strip");
   if (errors.length) errors.forEach((e) => fail(`reduced console: ${e}`));
   else ok("reduced-motion no console errors");
   await ctx.close();
