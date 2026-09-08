@@ -7,6 +7,7 @@
     size = 'md', // 'md' | 'lg' | 'menu'
     magnetic = false,
     class: cls2 = '',
+    children,
     ...rest
   } = $props();
 
@@ -27,7 +28,7 @@
 </script>
 
 {#if href}
-  <a {href} class={cls} {...rest}><slot /></a>
+  <a {href} class={cls} {...rest}>{@render children()}</a>
 {:else}
-  <button class={cls} {onclick} {...rest}><slot /></button>
+  <button class={cls} {onclick} {...rest}>{@render children()}</button>
 {/if}
