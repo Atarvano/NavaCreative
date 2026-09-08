@@ -111,9 +111,7 @@ async function fullScroll(page) {
       cols: grid.gridTemplateColumns.split(" ").length,
       settled: cards.map((c) => getComputedStyle(c).opacity),
       imgs,
-      teamSpacer: !!document
-        .querySelector("#team")
-        .closest(".pin-spacer"),
+      teamSpacer: !!document.querySelector("#team").closest(".pin-spacer"),
     };
   });
   if (team.count === 4) ok("desktop team shows all 4 makers");
@@ -128,7 +126,8 @@ async function fullScroll(page) {
   if (team.imgs.every((i) => i.naturalW > 500))
     ok("desktop team photos loaded sharp (natural width > 500px)");
   else fail(`desktop team photos weak: ${JSON.stringify(team.imgs)}`);
-  if (team.teamSpacer) fail("desktop team still wrapped in a pin-spacer"); else ok("desktop team has no pin spacer");
+  if (team.teamSpacer) fail("desktop team still wrapped in a pin-spacer");
+  else ok("desktop team has no pin spacer");
 
   // Marquee dots painted (the 04 revisit): alternating magenta/teal.
   const dots = await page.evaluate(() =>
@@ -138,14 +137,15 @@ async function fullScroll(page) {
   );
   const distinct = new Set(dots);
   if (dots.every((c) => c !== "rgba(0, 0, 0, 0)") && distinct.size === 2)
-    ok(`desktop marquee dots painted, alternating (${[...distinct].join(" / ")})`);
+    ok(
+      `desktop marquee dots painted, alternating (${[...distinct].join(" / ")})`,
+    );
   else fail(`desktop marquee dots unpainted: ${dots.join(", ")}`);
 
   // Full scroll: every signature moment fires, work pin still the only pin.
   await fullScroll(page);
   const motion = await page.evaluate(() => {
-    const op = (sel) =>
-      getComputedStyle(document.querySelector(sel)).opacity;
+    const op = (sel) => getComputedStyle(document.querySelector(sel)).opacity;
     const yOf = (sel) => {
       const els = [...document.querySelectorAll(sel)];
       return els.map(
@@ -153,17 +153,14 @@ async function fullScroll(page) {
       );
     };
     let spacers = 0;
-    document
-      .querySelectorAll(".pin-spacer")
-      .forEach((s) => {
-        if (s.querySelector("#work")) spacers++;
-      });
+    document.querySelectorAll(".pin-spacer").forEach((s) => {
+      if (s.querySelector("#work")) spacers++;
+    });
     const totalSpacers = document.querySelectorAll(".pin-spacer").length;
     return {
       heroTitleY: yOf(".hero-title .line"),
-      aboutBandClip: getComputedStyle(
-        document.querySelector(".about-band"),
-      ).clipPath,
+      aboutBandClip: getComputedStyle(document.querySelector(".about-band"))
+        .clipPath,
       servicesOpacity: op(".service-row"),
       liveSettled: yOf(".live-card"),
       teamSettled: yOf("#team .team-card"),
@@ -183,8 +180,7 @@ async function fullScroll(page) {
   )
     ok("desktop about band revealed (clip settled)");
   else fail(`desktop about band clip = ${motion.aboutBandClip}`);
-  if (motion.servicesOpacity === "1")
-    ok("desktop services rows cascaded in");
+  if (motion.servicesOpacity === "1") ok("desktop services rows cascaded in");
   else fail(`desktop services rows opacity = ${motion.servicesOpacity}`);
   if (motion.liveSettled.every((y) => Math.abs(y) < 1))
     ok("desktop live stagger fired (cards at y=0)");
@@ -201,11 +197,9 @@ async function fullScroll(page) {
   const para = await page.evaluate(async () => {
     const band = document.querySelector(".about-band");
     const img = band.querySelector("img");
-    const y = (el) =>
-      new DOMMatrixReadOnly(getComputedStyle(el).transform).m42;
+    const y = (el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).m42;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const bandTop =
-      band.getBoundingClientRect().top + window.scrollY;
+    const bandTop = band.getBoundingClientRect().top + window.scrollY;
     window.scrollTo({
       top: bandTop - window.innerHeight / 2,
       behavior: "instant",
@@ -225,7 +219,11 @@ async function fullScroll(page) {
     const p = document.querySelector("#servicesPreview");
     const row = document.querySelector(".service-row");
     row.dispatchEvent(
-      new PointerEvent("pointerenter", { bubbles: true, clientX: 700, clientY: 400 }),
+      new PointerEvent("pointerenter", {
+        bubbles: true,
+        clientX: 700,
+        clientY: 400,
+      }),
     );
     await new Promise((r) => setTimeout(r, 600));
     return getComputedStyle(p).opacity;
@@ -265,14 +263,15 @@ async function fullScroll(page) {
       workPos: getComputedStyle(document.querySelector("#work")).position,
     };
   });
-  if (mob.count === 4 && mob.stacked) ok("mobile team stacks full-width (4 cards)");
+  if (mob.count === 4 && mob.stacked)
+    ok("mobile team stacks full-width (4 cards)");
   else fail(`mobile team layout wrong: ${JSON.stringify(mob)}`);
-  if (mob.settled.every((o) => o === "1"))
-    ok("mobile team stagger fired");
+  if (mob.settled.every((o) => o === "1")) ok("mobile team stagger fired");
   else fail(`mobile team cards unsettled: ${mob.settled.join(",")}`);
   if (mob.spacers === 0) ok("mobile page has zero pins");
   else fail(`mobile found ${mob.spacers} pin spacer(s)`);
-  if (mob.workPos === "fixed") fail("mobile work pinned"); else ok("mobile work never pins");
+  if (mob.workPos === "fixed") fail("mobile work pinned");
+  else ok("mobile work never pins");
   await page.screenshot({ path: join(SHOTS, "04-mobile-team-grid.png") });
   if (errors.length) errors.forEach((e) => fail(`mobile console: ${e}`));
   else ok("mobile no console errors");

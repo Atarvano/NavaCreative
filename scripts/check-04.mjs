@@ -104,7 +104,10 @@ check("signature moments wired per section", () => {
   );
   const services = read("src/sections/Services.svelte");
   must(services.includes("quickTo"), "Services lost its cursor preview");
-  must(services.includes("magnetic") === false, "Services rows were never magnetic; Hero/Cta own magnetic");
+  must(
+    services.includes("magnetic") === false,
+    "Services rows were never magnetic; Hero/Cta own magnetic",
+  );
   const live = read("src/sections/Live.svelte");
   must(live.includes("live-card"), "Live lost its card cascade hook");
   must(
@@ -120,12 +123,18 @@ check("signature moments wired per section", () => {
 check("marquee dots painted alternating magenta/teal", () => {
   const src = read("src/sections/Marquee.svelte");
   must(!src.includes("4n + 1"), "Marquee keeps the dead 4n+1 selector");
-  must(!src.includes("intentionally unpainted"), "Marquee keeps the unpainted-dots comment");
+  must(
+    !src.includes("intentionally unpainted"),
+    "Marquee keeps the unpainted-dots comment",
+  );
   // Per-dot utilities, not nth-child: the drift loop quadruples innerHTML,
   // so classes ride along and no selector math can desync from the list.
   const magentas = (src.match(/bg-magenta-bloom/g) || []).length;
   const teals = (src.match(/bg-forest-teal/g) || []).length;
-  must(magentas === 3 && teals === 3, "want 3 magenta + 3 teal dots, got " + magentas + " + " + teals);
+  must(
+    magentas === 3 && teals === 3,
+    "want 3 magenta + 3 teal dots, got " + magentas + " + " + teals,
+  );
 });
 
 check("motion.js untouched", () => {
@@ -152,7 +161,7 @@ check("team + marquee utilities emitted in dist output", () => {
     ["lg" + String.fromCharCode(92) + ":grid", "-cols-4"].join(""),
     ["bg-magenta", "-bloom"].join(""),
     ["bg-forest", "-teal"].join(""),
-  ]
+  ];
   const cssFiles = readdirSync("dist/assets").filter((f) => f.endsWith(".css"));
   must(cssFiles.length > 0, "no CSS emitted to dist/assets");
   const css = cssFiles.map((f) => read(`dist/assets/${f}`)).join("\n");
