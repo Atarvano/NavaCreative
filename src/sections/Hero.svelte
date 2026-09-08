@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { gsap, motion, magnetic } from '../lib/motion.js';
+  import Pill from '../components/ui/Pill.svelte';
 
   // Paused intro timeline (the preloader plays it via play()); owns its
   // initial states via fromTo since the Svelte shell releases the
@@ -61,27 +62,27 @@
 </script>
 
 <!-- Hero: editorial manifesto + full-bleed photo band + Caption plate. -->
-<section class="hero" id="home" bind:this={section}>
-  <div class="hero-top">
-    <h1 class="hero-title">
+<section id="home" bind:this={section} class="pb-12">
+  <div class="pt-[calc(var(--nav-h)_+_64px)] max-md:pt-[calc(var(--nav-h)_+_24px)]">
+    <h1 class="hero-title mb-12 text-[clamp(2.75rem,8.4vw,84px)] leading-none font-light tracking-[-0.04em] max-md:text-[clamp(2.1rem,9.5vw,4rem)]">
       <span class="line-mask"><span class="line">Crafting Moments,</span></span>
       <span class="line-mask"><span class="line">Creating Impact.</span></span>
     </h1>
   </div>
-  <div class="hero-side">
-    <p class="hero-sub">A creative entity bringing fresh, solution-oriented ideas to today's visual and communication needs.</p>
-    <div class="hero-ctas">
-      <a class="btn btn-accent magnetic" href="https://wa.me/6285817999140" target="_blank" rel="noopener">Start a Project</a>
-      <a class="btn btn-ghost magnetic" href="#work">See Work</a>
+  <div class="hero-side mb-16 flex items-end justify-between gap-8 max-md:flex-col max-md:items-start">
+    <p class="max-w-[30rem] text-subheading text-graphite">A creative entity bringing fresh, solution-oriented ideas to today's visual and communication needs.</p>
+    <div class="flex flex-wrap gap-2">
+      <Pill href="https://wa.me/6285817999140" target="_blank" rel="noopener" magnetic>Start a Project</Pill>
+      <Pill href="#work" variant="ghost" magnetic>See Work</Pill>
     </div>
   </div>
-  <div class="hero-media">
-    <div class="hero-frame">
-      <img src="./img/hero-main.jpg" alt="Nava Creative photographer on set" width="1800" height="2400" fetchpriority="high" />
+  <div class="relative mx-[calc(var(--pad)*-1)] h-[72vh] min-h-[380px] max-md:h-[52vh]">
+    <div class="hero-frame h-full w-full">
+      <img src="./img/hero-main.jpg" alt="Nava Creative photographer on set" width="1800" height="2400" fetchpriority="high" class="h-full w-full object-cover" />
     </div>
-    <div class="hero-overlay">
-      <p class="hero-meta">Nava Creative Studio // Batam</p>
-      <p class="hero-overlay-title">On set with the crew.</p>
+    <div class="absolute bottom-12 left-8 z-1 block w-fit max-w-[min(560px,80%)] bg-bone-white px-6 py-4 text-ink-black max-md:bottom-4 max-md:left-4">
+      <p class="mb-2 text-caption text-graphite uppercase">Nava Creative Studio // Batam</p>
+      <p class="text-heading-sm leading-[1.25] font-light">On set with the crew.</p>
     </div>
   </div>
 </section>

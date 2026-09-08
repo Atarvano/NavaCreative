@@ -60,11 +60,11 @@
 </script>
 
 <!-- Preloader: NAVA wordmark lift. -->
-<div class="preloader" id="preloader" aria-hidden="true" bind:this={el}>
-  <div class="preloader-word">
-    <span class="preloader-letter">N</span>
-    <span class="preloader-letter">A</span>
-    <span class="preloader-letter">V</span>
-    <span class="preloader-letter preloader-letter-last">A</span>
+<div class="preloader fixed inset-0 z-100 flex items-center justify-center bg-canvas" id="preloader" aria-hidden="true" bind:this={el}>
+  <div class="flex overflow-hidden">
+    <span class="preloader-letter text-display leading-none font-light">N</span>
+    <span class="preloader-letter text-display leading-none font-light">A</span>
+    <span class="preloader-letter text-display leading-none font-light">V</span>
+    <span class="preloader-letter text-display leading-none font-light text-magenta-bloom">A</span>
   </div>
 </div>
