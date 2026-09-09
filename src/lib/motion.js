@@ -119,10 +119,22 @@ export function magnetic(btn, signal) {
  * entrance tween completes so the two never fight.
  */
 export function tilt(card, signal, maxTilt = 6) {
-  const rX = gsap.quickTo(card, "rotationX", { duration: 0.5, ease: "power3.out" });
-  const rY = gsap.quickTo(card, "rotationY", { duration: 0.5, ease: "power3.out" });
+  const rX = gsap.quickTo(card, "rotationX", {
+    duration: 0.5,
+    ease: "power3.out",
+  });
+  const rY = gsap.quickTo(card, "rotationY", {
+    duration: 0.5,
+    ease: "power3.out",
+  });
   let rect = null;
-  card.addEventListener("pointerenter", () => { rect = card.getBoundingClientRect(); }, { signal });
+  card.addEventListener(
+    "pointerenter",
+    () => {
+      rect = card.getBoundingClientRect();
+    },
+    { signal },
+  );
   card.addEventListener(
     "pointermove",
     (e) => {
@@ -138,7 +150,12 @@ export function tilt(card, signal, maxTilt = 6) {
     "pointerleave",
     () => {
       rect = null;
-      gsap.to(card, { rotationX: 0, rotationY: 0, duration: 0.7, ease: "elastic.out(1, 0.5)" });
+      gsap.to(card, {
+        rotationX: 0,
+        rotationY: 0,
+        duration: 0.7,
+        ease: "elastic.out(1, 0.5)",
+      });
     },
     { signal },
   );
