@@ -19,6 +19,12 @@ ScrollTrigger.config({ ignoreMobileResize: true });
  */
 export const SCRUB_RANGE = 7;
 
+/**
+ * Typewriter typing speed: seconds per character. ~2s per heading keeps the
+ * kinetic read without gating visitors behind a slow trickle.
+ */
+export const TYPE_SECONDS_PER_CHAR = 0.028;
+
 // Late font swap changes text metrics -> stale pin-spacer heights -> sections
 // overlap. Refresh once fonts are final.
 if (document.fonts?.ready) {
@@ -41,6 +47,65 @@ export const reducedMotion = () => mq.matches;
 export function motion(scope, setup) {
   if (reducedMotion()) return null;
   return gsap.context(setup, scope);
+}
+
+/**
+ * Per-character Typewriter reveal for one heading's `.line` children
+ * (About statement + CTA heading only; every other title keeps lines()).
+ * The full copy is read from the DOM, the lines are cleared (a CSS
+ * non-breaking space keeps their height so layout never shifts), and on
+ * section entry each line is typed in reading order via TextPlugin with a
+ * blinking aria-hidden caret riding the active line (as a `.line-mask` child
+ * after the line, so TextPlugin's content rewrites can never wipe it). The caret is removed
+ * on completion; any interruption (overwrite, kill, context revert) and the
+ * returned restore settle to full text, so a heading can never strand
+ * half-typed. Must run inside motion() (reduced motion keeps full static
+ * text); call the returned restore after ctx.revert() on destroy.
+ */
+export function typewrite(heading) {
+  const noop = () => {};
+  if (!heading) return noop;
+  const lines = [...heading.querySelectorAll(".line")];
+  if (!lines.length) return noop;
+  const full = lines.map((l) => l.textContent);
+  heading.classList.add("typewriter");
+  lines.forEach((l) => {
+    l.textContent = "";
+  });
+
+  const caret = document.createElement("span");
+  caret.className = "type-caret";
+  caret.setAttribute("aria-hidden", "true");
+
+  const settle = () => {
+    lines.forEach((l, i) => {
+      l.textContent = full[i];
+    });
+    caret.remove();
+    heading.classList.remove("typewriter");
+  };
+
+  const tl = gsap.timeline({
+    paused: true,
+    onComplete: settle,
+    onInterrupt: settle,
+    onRevert: settle,
+  });
+  full.forEach((text, i) => {
+    tl.call(() => lines[i].after(caret));
+    tl.to(lines[i], {
+      text,
+      duration: Math.max(text.length * TYPE_SECONDS_PER_CHAR, 0.15),
+      ease: "none",
+    });
+  });
+  ScrollTrigger.create({
+    trigger: heading,
+    start: "top 85%",
+    once: true,
+    onEnter: () => tl.play(),
+  });
+  return settle;
 }
 
 /**

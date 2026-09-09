@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, reveals, SCRUB_RANGE } from '../lib/motion.js';
+  import { gsap, motion, typewrite, reveals, SCRUB_RANGE } from '../lib/motion.js';
 
   // Statement line reveal + full-bleed band clip/settle + band parallax
   // (the SCRUB_RANGE Scrub shared with Live frames)
@@ -9,10 +9,11 @@
   // drives the parallax.
   let section;
   let ctx;
+  let settleType = () => {};
 
   onMount(() => {
     ctx = motion(section, () => {
-      lines(section.querySelector('.about-statement'));
+      settleType = typewrite(section.querySelector('.about-statement'));
       reveals(section);
       const band = section.querySelector('.about-band');
       gsap.fromTo(
@@ -79,7 +80,10 @@
     });
   });
 
-  onDestroy(() => ctx?.revert());
+  onDestroy(() => {
+    ctx?.revert();
+    settleType();
+  });
 </script>
 
 <!-- About: statement + full-bleed BTS band with Caption plate + copy/photo pair. -->
