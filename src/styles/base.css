@@ -154,6 +154,35 @@ body.menu-locked {
  transform: translateY(-100%);
 }
 
+/* Scroll depth (ticket 04): once past the Hero the nav gains a frosted
+   canvas ground, the active-section link reads as Ink, and the 1px page
+   progress fill fades in. JS toggles nav--scrolled the same way as
+   nav--hidden, so these stay global too. The ground is a plain aRGB
+   literal: a color-mix in this rule drops the whole declaration in
+   headless Chromium, and the computed color is identical either way
+   (#f0efe9 at 82%). */
+#nav {
+ background: transparent;
+ transition:
+  transform 0.45s var(--ease-out),
+  background-color 0.35s var(--ease-out);
+}
+#nav.nav--scrolled {
+ background: #f0efe9d1;
+ backdrop-filter: blur(12px);
+ -webkit-backdrop-filter: blur(12px);
+}
+#nav nav a[aria-current="location"] {
+ color: var(--color-ink-black);
+}
+#nav.nav--scrolled .nav-progress {
+ /* unlayered base.css loses to layered utilities without this: both are
+    single-class specificity, but @layer puts opacity-0 later in the
+    cascade — so this re-affirms the scrolled state, not a specificity
+    fight. */
+ opacity: 1 !important;
+}
+
 /* Dedicated masks for menu links - never touched by the page-level line gate */
 .menu-mask {
  display: block;

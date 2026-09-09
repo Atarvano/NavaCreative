@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { motion, lines } from '../lib/motion.js';
+  import { motion, lines, drift } from '../lib/motion.js';
 
   // Giant closing wordmark line reveal.
   // `base` prefixes the menu anchors: '' on the index, 'index.html'
@@ -13,6 +13,18 @@
   onMount(() => {
     ctx = motion(footer, () => {
       lines(footer.querySelector('.footer-word'));
+      // Index only: ServiceDetail mounts Footer too, but story #33 locks
+      // service pages pixel-untouched. The sibling-guard reads the two
+      // app shells apart (#home = index, #service-detail = service page)
+      // so the wordmark drifts on the index and stays static elsewhere.
+      if (document.querySelector('#app main > #home'))
+        drift(footer.querySelector('.footer-word'), {
+          axis: 'x',
+          range: 48,
+          trigger: footer,
+          start: 'top bottom',
+          end: 'bottom bottom',
+        });
     });
   });
 

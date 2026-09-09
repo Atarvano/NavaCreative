@@ -109,6 +109,30 @@ export function typewrite(heading) {
 }
 
 /**
+ * Scroll-bound drift for one element (ticket 04): across ±range px on one
+ * axis, transform-only, never a layout shift. trigger/start/end override
+ * the passage: the CTA strip and footer wordmark sit too close to the page
+ * bottom for the default 'bottom top' end to ever be reached, so they peg
+ * to ends their scroll range can actually traverse. Must run inside motion().
+ */
+export function drift(
+  el,
+  { axis = "y", range = 28, trigger = null, start = "top bottom", end = "bottom top" } = {},
+) {
+  if (!el) return;
+  const prop = axis === "x" ? "x" : "y";
+  gsap.fromTo(
+    el,
+    { [prop]: -range },
+    {
+      [prop]: range,
+      ease: "none",
+      scrollTrigger: { trigger: trigger || el, start, end, scrub: true },
+    },
+  );
+}
+
+/**
  * Masked line reveal for a heading's `.line` children (split per section:
  * each component calls this on its own heading, so no global pass can double-animate Work's pinned title). Must run inside a
  * motion() context so the trigger reverts with the component.

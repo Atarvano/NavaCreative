@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion } from '../lib/motion.js';
+  import { gsap, ScrollTrigger, motion } from '../lib/motion.js';
   import Tag from '../components/ui/Tag.svelte';
 
   // Work portfolio in Tailwind: static markup plus the ADR-0003 desktop pin
@@ -39,10 +39,30 @@
         }
       );
 
+      // Scroll depth (ticket 04): hairline + card counter tracking the
+      // horizontal travel. Two sources, one contract — the pin's onUpdate
+      // on desktop, the track's native scroll on mobile — merged through
+      // setMeters so both always agree on progress and the 01-based card.
+      // Index N = round(p * (N-1)) + 1: the closest passed card edge.
+      const cards = [...section.querySelectorAll('.work-card')];
+      const fill = section.querySelector('.work-progress-fill');
+      const counter = section.querySelector('.work-counter');
+      const total = String(cards.length).padStart(2, '0');
+      const setMeters = (p) => {
+        const i = Math.min(cards.length - 1, Math.round(p * (cards.length - 1)));
+        fill.style.transform = `scaleX(${p})`;
+        counter.textContent = `${String(i + 1).padStart(2, '0')} / ${total}`;
+      };
+      setMeters(0);
+
       mm = gsap.matchMedia();
 
       // Desktop pin: cards travel horizontally while the section holds one
       // viewport. invalidateOnRefresh keeps the distance honest on resize.
+      // onRefresh re-syncs the meters to the true pin progress: after a
+      // refresh (pin re-created at progress 1), ScrollTrigger deliberately
+      // suppresses an onUpdate with an unchanged progress, so without
+      // this the counter could strand at 08/08 at pin start.
       mm.add('(min-width: 768px)', () => {
         const distance = () => track.scrollWidth - window.innerWidth;
         const scrollTween = gsap.to(track, {
@@ -55,6 +75,8 @@
             pin: true,
             scrub: 1,
             invalidateOnRefresh: true,
+            onUpdate: (self) => setMeters(self.progress),
+            onRefresh: (self) => setMeters(ScrollTrigger.isInViewport(section) ? self.progress : 0),
           },
         });
 
@@ -77,8 +99,19 @@
         });
       });
 
-      // Mobile: no pin, cards fade up in the snap carousel.
+      // Mobile: no pin, cards fade up in the snap carousel; the meters
+      // track the track's own native scroll, aborted on branch revert.
       mm.add('(max-width: 767px)', () => {
+        const ac = new AbortController();
+        track.addEventListener(
+          'scroll',
+          () => {
+            const max = track.scrollWidth - track.clientWidth;
+            setMeters(max > 0 ? track.scrollLeft / max : 0);
+          },
+          { signal: ac.signal, passive: true }
+        );
+        setMeters(0);
         section.querySelectorAll('.work-card').forEach((card) => {
           gsap.fromTo(
             card,
@@ -92,6 +125,7 @@
             }
           );
         });
+        return () => ac.abort();
       });
     });
   });
@@ -106,7 +140,7 @@
 
 <!-- Work: horizontal print portfolio. -->
 <section class="work px-0 md:h-[100dvh] md:overflow-hidden md:p-0" id="work" bind:this={section}>
-  <div class="mb-12 flex items-end justify-between gap-8 px-(--pad) md:mb-6 md:pt-[calc(var(--nav-h)_+_24px)]">
+  <div class="mb-12 flex items-end justify-between gap-8 px-(--pad) md:mb-4 md:pt-[calc(var(--nav-h)_+_24px)]">
     <div>
       <p class="mb-12 text-caption text-graphite uppercase">Work</p>
       <h2 class="section-title mb-0 text-heading font-light max-md:text-[clamp(2rem,8.5vw,3rem)] max-md:tracking-[-0.02em]">
@@ -114,8 +148,12 @@
       </h2>
     </div>
     <p class="text-caption text-graphite uppercase">Photo &amp; video productions</p>
+    <p class="work-counter ml-auto text-caption text-graphite uppercase tabular-nums" aria-hidden="true">01 / 08</p>
   </div>
-  <div class="flex items-end gap-12 px-(--pad) pb-4 will-change-transform max-md:snap-x max-md:snap-mandatory max-md:overflow-x-auto md:pb-8" id="workTrack" bind:this={track}>
+  <div aria-hidden="true" class="work-progress mx-(--pad) mb-4 h-px bg-ash/40 md:mb-6">
+    <div class="work-progress-fill h-full w-full origin-left bg-ink-black" style="transform: scaleX(0)"></div>
+  </div>
+  <div class="flex items-end gap-12 px-(--pad) pb-4 will-change-transform max-md:snap-x max-md:snap-mandatory max-md:overflow-x-auto md:pb-6" id="workTrack" bind:this={track}>
     <article class="work-card group flex-none max-md:w-[min(78vw,340px)] max-md:snap-start">
       <figure class="aspect-[3/4] w-full md:aspect-[3/2] md:h-[min(44vh,460px)] md:w-auto"><img src="img/pv-ihsan-ochi.jpg" alt="Prewedding portrait of Ihsan and Ochi" width="1200" height="1800" loading="lazy" class="h-full w-full object-cover grayscale transition-[filter,transform] duration-500 ease-emphasis group-hover:scale-[1.03] group-hover:grayscale-0" /></figure>
       <Tag class="mt-4">Photo Prewedding</Tag>
