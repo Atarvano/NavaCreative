@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, reveals, magnetic } from '../lib/motion.js';
+  import { gsap, motion, typewrite, reveals, magnetic } from '../lib/motion.js';
   import Pill from '../components/ui/Pill.svelte';
 
   // CTA heading line reveal + magnetic button (desktop) + stills plates
@@ -9,10 +9,11 @@
   let section;
   let ctx;
   let mm;
+  let settleType = () => {};
 
   onMount(() => {
     ctx = motion(section, () => {
-      lines(section.querySelector('.cta-title'));
+      settleType = typewrite(section.querySelector('.cta-title'));
       reveals(section);
       gsap.fromTo(
         section.querySelectorAll('.cta-strip img'),
@@ -44,6 +45,7 @@
   onDestroy(() => {
     mm?.revert();
     ctx?.revert();
+    settleType();
   });
 </script>
 
