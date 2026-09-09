@@ -26,7 +26,7 @@
 </script>
 
 <!-- Back bar: icon-only back link + lockup. No nav links, no Menu button, no overlay. -->
-<header class="fixed inset-x-0 top-0 z-50 flex h-(--nav-h) items-center justify-between gap-8 px-(--pad) transition-transform duration-450 ease-emphasis [.backbar--hidden&]:-translate-y-full" id="backbar" bind:this={header}>
+<header class="fixed inset-x-0 top-0 z-50 flex h-(--nav-h) items-center justify-between gap-8 px-(--pad) transition-transform duration-450 ease-emphasis" id="backbar" bind:this={header}>
   <a class="inline-flex min-h-11 min-w-11 items-center justify-center text-body text-graphite transition-colors duration-200 hover:text-ink-black" href="index.html#services" aria-label="All services">←</a>
   <a class="inline-flex items-center gap-3" href="index.html">
     <span aria-hidden="true" class="relative h-8 w-8 flex-none rounded-full bg-ink-black after:absolute after:inset-0 after:m-auto after:h-2 after:w-2 after:rounded-full after:bg-bone-white"></span>

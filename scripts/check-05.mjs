@@ -65,10 +65,7 @@ check("Backbar + ServiceDetail use utilities, no legacy style classes", () => {
       `${f} shows no Tailwind utilities`,
     );
     for (const t of tokens(src))
-      must(
-        !LEGACY_SERVICE_CLASSES.has(t),
-        `${f} still uses legacy .${t}`,
-      );
+      must(!LEGACY_SERVICE_CLASSES.has(t), `${f} still uses legacy .${t}`);
   }
 });
 
