@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, typewrite, reveals, magnetic } from '../lib/motion.js';
+  import { gsap, motion, typewrite, reveals, drift, magnetic } from '../lib/motion.js';
   import Pill from '../components/ui/Pill.svelte';
 
   // CTA heading line reveal + magnetic button (desktop) + stills plates
@@ -14,7 +14,15 @@
   onMount(() => {
     ctx = motion(section, () => {
       settleType = typewrite(section.querySelector('.cta-title'));
+      drift(section.querySelector('.cta-title'));
       reveals(section);
+      drift(section.querySelector('.cta-strip'), {
+        axis: 'x',
+        range: 20,
+        trigger: section,
+        start: 'top 85%',
+        end: 'bottom bottom',
+      });
       gsap.fromTo(
         section.querySelectorAll('.cta-strip img'),
         { opacity: 0, scale: 0.92 },

@@ -1,18 +1,19 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, SCRUB_RANGE } from '../lib/motion.js';
+  import { gsap, motion, lines, drift, SCRUB_RANGE } from '../lib/motion.js';
   import SectionTitle from '../components/ui/SectionTitle.svelte';
   import Tag from '../components/ui/Tag.svelte';
 
-  // Heading line reveal + card cascade; desktop adds the parallax scrub
-  // on each frame's img (triggered off the .parallax wrapper).
+  // Heading line reveal + card cascade + title drift; the parallax scrub
+  // on each frame's img (triggered off the .parallax wrapper) runs
+  // ungated since ticket 04 for scroll parity.
   let section;
   let ctx;
-  let mm;
 
   onMount(() => {
     ctx = motion(section, () => {
       lines(section.querySelector('.section-title'));
+      drift(section.querySelector('.section-title'));
       section.querySelectorAll('.live-card').forEach((card, i) => {
         gsap.fromTo(
           card,
@@ -27,32 +28,28 @@
           }
         );
       });
-      mm = gsap.matchMedia();
-      mm.add('(min-width: 769px)', () => {
-        section.querySelectorAll('.parallax img').forEach((img) => {
-          gsap.fromTo(
-            img,
-            { yPercent: -SCRUB_RANGE },
-            {
-              yPercent: SCRUB_RANGE,
-              ease: 'none',
-              scrollTrigger: {
-                trigger: img.closest('.parallax'),
-                start: 'top bottom',
-                end: 'bottom top',
-                scrub: true,
-              },
-            }
-          );
-        });
+      // Scroll parity: the Scrub runs on mobile too (ticket 04 un-gates
+      // the desktop-only frames; the About band was never gated).
+      section.querySelectorAll('.parallax img').forEach((img) => {
+        gsap.fromTo(
+          img,
+          { yPercent: -SCRUB_RANGE },
+          {
+            yPercent: SCRUB_RANGE,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: img.closest('.parallax'),
+              start: 'top bottom',
+              end: 'bottom top',
+              scrub: true,
+            },
+          }
+        );
       });
     });
   });
 
-  onDestroy(() => {
-    mm?.revert();
-    ctx?.revert();
-  });
+  onDestroy(() => ctx?.revert());
 </script>
 
 <!-- Live: event records grid. -->

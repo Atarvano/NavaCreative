@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines } from '../lib/motion.js';
+  import { gsap, motion, lines, drift } from '../lib/motion.js';
   import SectionTitle from '../components/ui/SectionTitle.svelte';
 
   // Heading line reveal + row cascade; desktop adds the cursor-follow
@@ -13,6 +13,7 @@
   onMount(() => {
     ctx = motion(section, () => {
       lines(section.querySelector('.section-title'));
+      drift(section.querySelector('.section-title'));
       gsap.fromTo(
         section.querySelectorAll('.service-row'),
         { opacity: 0, y: 36 },

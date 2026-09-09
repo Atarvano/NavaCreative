@@ -7,6 +7,13 @@
   // the overlay opens.
   let { onmenu, open = false } = $props();
 
+  // Hero bottom in document space, read live so pin spacers and font
+  // swaps can never strand the blur/progress threshold.
+  const heroBottom = () => {
+    const home = document.getElementById('home');
+    return home ? home.offsetTop + home.offsetHeight : 0;
+  };
+
   let header;
   let ctx;
 
@@ -15,6 +22,7 @@
   });
 
   onMount(() => {
+    const progress = header.querySelector('.nav-progress');
     ctx = motion(header, () => {
       ScrollTrigger.create({
         start: 0,
@@ -25,7 +33,35 @@
             'nav--hidden',
             self.direction === 1 && self.scroll() > 160
           );
+          // Scroll depth (ticket 04): blur ground + page progress once
+          // past the Hero. The 1px fill draws with scaleX so progress
+          // never costs layout; the transform is set directly (not via
+          // gsap) because Tailwind v4 parks initial states in the CSS
+          // `scale` property, which gsap doesn't own — gsap.set would
+          // leave the fill pinned at full width on first paint.
+          header.classList.toggle('nav--scrolled', self.scroll() > heroBottom());
+          progress.style.transform = `scaleX(${self.progress})`;
         },
+      });
+      ['about', 'services', 'work', 'live', 'team', 'contact'].forEach((id) => {
+        const sec = document.getElementById(id);
+        const link = header.querySelector(`nav a[href="#${id}"]`);
+        if (!sec || !link) return;
+        ScrollTrigger.create({
+          trigger: sec,
+          start: 'top center',
+          end: 'bottom center',
+          onToggle: (self) => {
+            if (self.isActive) {
+              header
+                .querySelectorAll('[aria-current]')
+                .forEach((a) => a.removeAttribute('aria-current'));
+              link.setAttribute('aria-current', 'location');
+            } else if (link.hasAttribute('aria-current')) {
+              link.removeAttribute('aria-current');
+            }
+          },
+        });
       });
     });
   });
@@ -50,4 +86,5 @@
   <span class="md:hidden">
     <Pill size="menu" id="menuBtn" aria-expanded={String(open)} aria-controls="menuOverlay" onclick={() => onmenu?.()}>Menu</Pill>
   </span>
+  <span aria-hidden="true" class="nav-progress absolute inset-x-0 bottom-0 h-px origin-left bg-ink-black opacity-0 transition-opacity duration-300" style="transform: scaleX(0)"></span>
 </header>
