@@ -67,7 +67,11 @@ export function typewrite(heading) {
   if (!heading) return noop;
   const lines = [...heading.querySelectorAll(".line")];
   if (!lines.length) return noop;
-  const full = lines.map((l) => l.textContent);
+  // Clone the full copy before clearing: textContent would drop nested
+  // markup (the CTA Rupture <em>), so each line keeps its HTML and the
+  // typing tween replays characters into a text node while the nested
+  // elements ride along untouched.
+  const full = lines.map((l) => l.innerHTML);
   heading.classList.add("typewriter");
   lines.forEach((l) => {
     l.textContent = "";
@@ -79,7 +83,7 @@ export function typewrite(heading) {
 
   const settle = () => {
     lines.forEach((l, i) => {
-      l.textContent = full[i];
+      l.innerHTML = full[i];
     });
     caret.remove();
     heading.classList.remove("typewriter");
@@ -91,13 +95,30 @@ export function typewrite(heading) {
     onInterrupt: settle,
     onRevert: settle,
   });
-  full.forEach((text, i) => {
+  // Type the line's TEXT (nested markup excluded from the count) by
+  // replaying characters into the first text node; nested elements
+  // (the rupture <em>) stay in place from first paint.
+  full.forEach((html, i) => {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    const text = tmp.textContent;
     tl.call(() => lines[i].after(caret));
-    tl.to(lines[i], {
-      text,
-      duration: Math.max(text.length * TYPE_SECONDS_PER_CHAR, 0.15),
-      ease: "none",
-    });
+    tl.to(
+      { n: 0 },
+      {
+        n: text.length,
+        duration: Math.max(text.length * TYPE_SECONDS_PER_CHAR, 0.15),
+        ease: "none",
+        onUpdate: function () {
+          const n = Math.round(this.targets()[0].n);
+          const line = lines[i];
+          const first = line.firstChild;
+          const slice = text.slice(0, n);
+          if (first?.nodeType === 3) first.textContent = slice;
+          else line.prepend(document.createTextNode(slice));
+        },
+      },
+    );
   });
   ScrollTrigger.create({
     trigger: heading,
