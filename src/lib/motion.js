@@ -117,7 +117,13 @@ export function typewrite(heading) {
  */
 export function drift(
   el,
-  { axis = "y", range = 28, trigger = null, start = "top bottom", end = "bottom top" } = {},
+  {
+    axis = "y",
+    range = 28,
+    trigger = null,
+    start = "top bottom",
+    end = "bottom top",
+  } = {},
 ) {
   if (!el) return;
   const prop = axis === "x" ? "x" : "y";
@@ -201,49 +207,40 @@ export function magnetic(btn, signal) {
 
 /**
  * Subtle pointer tilt for one card (desktop only, ticket 05). Rotation
- * follows the pointer (max `maxTilt` degrees at the card edge) with no layout
- * reads per frame — the rect is measured once per stroke, not per move —
- * and settles flat on leave. Call inside a fine-pointer matchMedia block
- * and abort `signal` on revert. Callers must gate tilt until the card's
- * entrance tween completes so the two never fight.
+ * follows the pointer (max `maxTilt` degrees at the card edge); the rect
+ * is re-measured on every move — one getBoundingClientRect per event is
+ * cheap next to the quickTo chase, and a stale rect is what strands
+ * cards tilted. Settles flat on leave. Call inside a fine-pointer
+ * matchMedia block and abort `signal` on revert. Callers gate tilt
+ * until the card's entrance tween completes so the two never fight.
  */
 export function tilt(card, signal, maxTilt = 6) {
-  const rX = gsap.quickTo(card, "rotationX", {
-    duration: 0.5,
-    ease: "power3.out",
-  });
-  const rY = gsap.quickTo(card, "rotationY", {
-    duration: 0.5,
-    ease: "power3.out",
-  });
-  let rect = null;
-  card.addEventListener(
-    "pointerenter",
-    () => {
-      rect = card.getBoundingClientRect();
-    },
-    { signal },
-  );
+  const entered = () => card.hasAttribute("data-entered");
   card.addEventListener(
     "pointermove",
     (e) => {
-      if (!rect) rect = card.getBoundingClientRect();
-      const px = (e.clientX - rect.left) / rect.width - 0.5;
-      const py = (e.clientY - rect.top) / rect.height - 0.5;
-      rX(-py * 2 * maxTilt);
-      rY(px * 2 * maxTilt);
+      if (!entered()) return;
+      const r = card.getBoundingClientRect();
+      gsap.to(card, {
+        rotationX: -((e.clientY - r.top) / r.height - 0.5) * 2 * maxTilt,
+        rotationY: ((e.clientX - r.left) / r.width - 0.5) * 2 * maxTilt,
+        duration: 0.5,
+        ease: "power3.out",
+        overwrite: "auto",
+      });
     },
     { signal },
   );
   card.addEventListener(
     "pointerleave",
     () => {
-      rect = null;
+      if (!entered()) return;
       gsap.to(card, {
         rotationX: 0,
         rotationY: 0,
         duration: 0.7,
         ease: "elastic.out(1, 0.5)",
+        overwrite: "auto",
       });
     },
     { signal },

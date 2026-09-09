@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, drift, SCRUB_RANGE } from '../lib/motion.js';
+  import { gsap, motion, lines, drift, tilt, SCRUB_RANGE } from '../lib/motion.js';
   import SectionTitle from '../components/ui/SectionTitle.svelte';
   import Tag from '../components/ui/Tag.svelte';
 
@@ -9,6 +9,7 @@
   // ungated since ticket 04 for scroll parity.
   let section;
   let ctx;
+  let mm;
 
   onMount(() => {
     ctx = motion(section, () => {
@@ -25,8 +26,20 @@
             ease: 'power3.out',
             delay: (i % 2) * 0.12,
             scrollTrigger: { trigger: card, start: 'top 86%', once: true },
+            onComplete: () => card.setAttribute('data-entered', ''),
           }
         );
+      });
+      // Hover layer (ticket 05): fine-pointer tilt on entered cards —
+      // same call pattern as Work (min-width branch + JS pointer gate).
+      mm = gsap.matchMedia();
+      mm.add('(min-width: 768px)', () => {
+        const ac = new AbortController();
+        if (matchMedia('(pointer: fine)').matches)
+          section
+            .querySelectorAll('.live-card')
+            .forEach((card) => tilt(card, ac.signal));
+        return () => ac.abort();
       });
       // Scroll parity: the Scrub runs on mobile too (ticket 04 un-gates
       // the desktop-only frames; the About band was never gated).
@@ -49,7 +62,10 @@
     });
   });
 
-  onDestroy(() => ctx?.revert());
+  onDestroy(() => {
+    mm?.revert();
+    ctx?.revert();
+  });
 </script>
 
 <!-- Live: event records grid. -->

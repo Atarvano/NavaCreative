@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, ScrollTrigger, motion } from '../lib/motion.js';
+  import { gsap, ScrollTrigger, motion, tilt } from '../lib/motion.js';
   import Tag from '../components/ui/Tag.svelte';
 
   // Work portfolio in Tailwind: static markup plus the ADR-0003 desktop pin
@@ -64,6 +64,7 @@
       // suppresses an onUpdate with an unchanged progress, so without
       // this the counter could strand at 08/08 at pin start.
       mm.add('(min-width: 768px)', () => {
+        const ac = new AbortController();
         const distance = () => track.scrollWidth - window.innerWidth;
         const scrollTween = gsap.to(track, {
           x: () => -distance(),
@@ -94,9 +95,17 @@
                 start: 'left 95%',
                 once: true,
               },
+              onComplete: () => card.setAttribute('data-entered', ''),
             }
           );
         });
+        // Hover layer (ticket 05): fine-pointer tilt on entered cards.
+        // The pointer gate keeps touch laptops out even at desktop width.
+        if (matchMedia('(pointer: fine)').matches)
+          section
+            .querySelectorAll('.work-card')
+            .forEach((card) => tilt(card, ac.signal));
+        return () => ac.abort();
       });
 
       // Mobile: no pin, cards fade up in the snap carousel; the meters

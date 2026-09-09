@@ -11,6 +11,7 @@
   import Cta from './sections/Cta.svelte';
   import Footer from './sections/Footer.svelte';
   import MenuOverlay from './sections/MenuOverlay.svelte';
+  import Cursor from './sections/Cursor.svelte';
 
   // Preloader owns the intro gate and plays the hero's paused
   // timeline when it lifts (or immediately under reduced motion).
@@ -20,6 +21,7 @@
 
 <Nav onmenu={() => (menuOpen = true)} open={menuOpen} />
 <MenuOverlay open={menuOpen} onclose={() => (menuOpen = false)} />
+<Cursor />
 <Preloader ondone={() => hero?.play?.()} />
 
 <main>
