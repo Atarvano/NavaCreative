@@ -1,14 +1,23 @@
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { TextPlugin } from "gsap/TextPlugin";
 
 // Shared motion helper. The single seam behind every animation:
-// gsap + ScrollTrigger registration, the prefers-reduced-motion gate, and the
+// gsap + ScrollTrigger (+ TextPlugin for the Typewriter) registration, the
+// prefers-reduced-motion gate, and the
 // document.fonts.ready refresh that keeps pin-spacer heights honest
 // (ADR-0003). Every animated component creates its triggers inside onMount
 // wrapped in gsap.context and reverts on destroy.
 
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger, TextPlugin);
 ScrollTrigger.config({ ignoreMobileResize: true });
+
+/**
+ * Shared Scrub parallax range: the -/+ yPercent drift for the About band
+ * and the Live frames, so depth reads at one speed across sections.
+ * Behavior today is exactly the old hardcoded -7/+7.
+ */
+export const SCRUB_RANGE = 7;
 
 // Late font swap changes text metrics -> stale pin-spacer heights -> sections
 // overlap. Refresh once fonts are final.
@@ -96,6 +105,57 @@ export function magnetic(btn, signal) {
     "pointerleave",
     () => {
       gsap.to(btn, { x: 0, y: 0, duration: 0.6, ease: "elastic.out(1, 0.4)" });
+    },
+    { signal },
+  );
+}
+
+/**
+ * Subtle pointer tilt for one card (desktop only, ticket 05). Rotation
+ * follows the pointer (max `maxTilt` degrees at the card edge) with no layout
+ * reads per frame — the rect is measured once per stroke, not per move —
+ * and settles flat on leave. Call inside a fine-pointer matchMedia block
+ * and abort `signal` on revert. Callers must gate tilt until the card's
+ * entrance tween completes so the two never fight.
+ */
+export function tilt(card, signal, maxTilt = 6) {
+  const rX = gsap.quickTo(card, "rotationX", {
+    duration: 0.5,
+    ease: "power3.out",
+  });
+  const rY = gsap.quickTo(card, "rotationY", {
+    duration: 0.5,
+    ease: "power3.out",
+  });
+  let rect = null;
+  card.addEventListener(
+    "pointerenter",
+    () => {
+      rect = card.getBoundingClientRect();
+    },
+    { signal },
+  );
+  card.addEventListener(
+    "pointermove",
+    (e) => {
+      if (!rect) rect = card.getBoundingClientRect();
+      const px = (e.clientX - rect.left) / rect.width - 0.5;
+      const py = (e.clientY - rect.top) / rect.height - 0.5;
+      rX(-py * 2 * maxTilt);
+      rY(px * 2 * maxTilt);
+    },
+    { signal },
+  );
+  card.addEventListener(
+    "pointerleave",
+    () => {
+      rect = null;
+      gsap.to(card, {
+        rotationX: 0,
+        rotationY: 0,
+        duration: 0.7,
+        ease: "elastic.out(1, 0.5)",
+      });
     },
     { signal },
   );
