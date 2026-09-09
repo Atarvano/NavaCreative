@@ -1,9 +1,9 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, reveals } from '../lib/motion.js';
+  import { gsap, motion, lines, reveals, SCRUB_RANGE } from '../lib/motion.js';
 
   // Statement line reveal + full-bleed band clip/settle + band parallax
-  // (the -7/+7 scrub shared with Live frames)
+  // (the SCRUB_RANGE Scrub shared with Live frames)
   // + copy fade-up + photo-pair rise. One once:true trigger (top 80%)
   // drives the clip, settle, and Caption plate tweens; a separate scrub
   // drives the parallax.
@@ -50,9 +50,9 @@
       );
       gsap.fromTo(
         band.querySelector('img'),
-        { yPercent: -7 },
+        { yPercent: -SCRUB_RANGE },
         {
-          yPercent: 7,
+          yPercent: SCRUB_RANGE,
           ease: 'none',
           scrollTrigger: {
             trigger: band,

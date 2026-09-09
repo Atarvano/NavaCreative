@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines } from '../lib/motion.js';
+  import { gsap, motion, lines, SCRUB_RANGE } from '../lib/motion.js';
   import SectionTitle from '../components/ui/SectionTitle.svelte';
   import Tag from '../components/ui/Tag.svelte';
 
@@ -32,9 +32,9 @@
         section.querySelectorAll('.parallax img').forEach((img) => {
           gsap.fromTo(
             img,
-            { yPercent: -7 },
+            { yPercent: -SCRUB_RANGE },
             {
-              yPercent: 7,
+              yPercent: SCRUB_RANGE,
               ease: 'none',
               scrollTrigger: {
                 trigger: img.closest('.parallax'),
