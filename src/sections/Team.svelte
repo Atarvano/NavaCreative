@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, drift } from '../lib/motion.js';
+  import { gsap, motion, lines, drift, tilt } from '../lib/motion.js';
   import SectionTitle from '../components/ui/SectionTitle.svelte';
   import Tag from '../components/ui/Tag.svelte';
 
@@ -9,6 +9,7 @@
   // Work Pin stays the single scroll-hijack on the page.
   let section;
   let ctx;
+  let mm;
 
   onMount(() => {
     ctx = motion(section, () => {
@@ -28,12 +29,32 @@
             start: 'top 82%',
             once: true,
           },
+          // Entrance gate for tilt(): each card flags entered on its
+          // own tween completion, never mid-flight.
+          onComplete: () =>
+            section.querySelectorAll('.team-card').forEach((c) => {
+              c.setAttribute('data-entered', '');
+            }),
         }
       );
+      // Hover layer (ticket 05): fine-pointer tilt on entered cards —
+      // same call pattern as Work (min-width branch + JS pointer gate).
+      mm = gsap.matchMedia();
+      mm.add('(min-width: 768px)', () => {
+        const ac = new AbortController();
+        if (matchMedia('(pointer: fine)').matches)
+          section
+            .querySelectorAll('.team-card')
+            .forEach((card) => tilt(card, ac.signal));
+        return () => ac.abort();
+      });
     });
   });
 
-  onDestroy(() => ctx?.revert());
+  onDestroy(() => {
+    mm?.revert();
+    ctx?.revert();
+  });
 </script>
 
 <!-- Team: the four Makers as an editorial photo grid. -->

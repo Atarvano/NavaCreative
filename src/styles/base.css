@@ -8,82 +8,96 @@
    ========================================================================== */
 
 :root {
- --nav-h: 68px;
- --pad: clamp(16px, 3vw, 32px);
- --section-gap: 64px;
+  --nav-h: 68px;
+  --pad: clamp(16px, 3vw, 32px);
+  --section-gap: 64px;
 
- --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
- margin: 0;
- padding: 0;
- box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 html {
- scroll-behavior: smooth;
- scroll-padding-top: calc(var(--nav-h) + 1rem);
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--nav-h) + 1rem);
 }
 
 body {
- background: var(--color-canvas);
- color: var(--color-ink-black);
- font-family: var(--font-sans);
- font-size: var(--text-body);
- font-weight: 400;
- line-height: 1.4;
- letter-spacing: -0.018em;
- -webkit-font-smoothing: antialiased;
- overflow-x: clip;
+  background: var(--color-canvas);
+  color: var(--color-ink-black);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: -0.018em;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
 
 img {
- display: block;
- max-width: 100%;
- height: auto;
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 a {
- color: inherit;
- text-decoration: none;
+  color: inherit;
+  text-decoration: none;
 }
 ul {
- list-style: none;
+  list-style: none;
 }
 figure {
- overflow: hidden;
+  overflow: hidden;
 }
 
 ::selection {
- background: var(--color-signal-yellow);
- color: var(--color-ink-black);
+  background: var(--color-signal-yellow);
+  color: var(--color-ink-black);
 }
 a:focus-visible,
 li:focus-visible {
- outline: 2px solid var(--color-ink-black);
- outline-offset: 3px;
+  outline: 2px solid var(--color-ink-black);
+  outline-offset: 3px;
 }
 
 /* Weight discipline: display is ALWAYS 300 */
 h1,
 h2,
 h3 {
- font-weight: 300;
+  font-weight: 300;
 }
 
 section {
- padding: clamp(64px, 11vh, 112px) var(--pad);
+  padding: clamp(64px, 11vh, 112px) var(--pad);
 }
 
 /* Masked line-reveal primitives (GSAP owns the motion via motion.js) */
 .line-mask {
- display: block;
- overflow: hidden;
- padding-bottom: 0.1em;
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.1em;
 }
 .line {
- display: inline-block;
- will-change: transform;
+  display: inline-block;
+  will-change: transform;
+}
+
+/* Hover layer (ticket 05): tilt depth on the three card families.
+   Perspective on the parent grids (not the track: it carries the pin
+   travel transform, which would flatten the 3D context) keeps the
+   rotation readable without touching card layout. */
+.team-grid,
+#live .grid,
+.work-card {
+  transform-style: preserve-3d;
+}
+.team-grid,
+#live .grid {
+  perspective: 1200px;
 }
 
 /* Typewriter headings (About statement + CTA title only): cleared lines
@@ -92,21 +106,21 @@ section {
    completion (aria-hidden, motion.js typewrite()). The caret inherits the
    heading color so it reads on Canvas and the Navy CTA alike. */
 .typewriter .line:empty::before {
- content: "\00a0";
+  content: "\00a0";
 }
 .type-caret {
- display: inline-block;
- width: 0.06em;
- height: 0.92em;
- margin-left: 0.06em;
- vertical-align: -0.08em;
- background: currentColor;
- animation: type-blink 1s steps(1) infinite;
+  display: inline-block;
+  width: 0.06em;
+  height: 0.92em;
+  margin-left: 0.06em;
+  vertical-align: -0.08em;
+  background: currentColor;
+  animation: type-blink 1s steps(1) infinite;
 }
 @keyframes type-blink {
- 50% {
-  opacity: 0;
- }
+  50% {
+    opacity: 0;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -115,18 +129,18 @@ section {
 /* Svelte shell: content renders statically until each component's animation
    owns its own initial states. */
 body:not(.no-js):not(.reduced):not(.svelte-shell) [data-reveal] {
- opacity: 0;
- transform: translateY(28px);
+  opacity: 0;
+  transform: translateY(28px);
 }
 body:not(.no-js):not(.reduced):not(.svelte-shell) .line-mask .line {
- transform: translateY(115%);
+  transform: translateY(115%);
 }
 body:not(.no-js):not(.reduced):not(.svelte-shell) .hero-frame {
- clip-path: inset(0% 0% 100% 0%);
+  clip-path: inset(0% 0% 100% 0%);
 }
 body:not(.no-js):not(.reduced):not(.svelte-shell) .hero-side > * {
- opacity: 0;
- transform: translateY(24px);
+  opacity: 0;
+  transform: translateY(24px);
 }
 body.no-js .line,
 body.reduced .line,
@@ -134,16 +148,16 @@ body.no-js [data-reveal],
 body.reduced [data-reveal],
 body.no-js .hero-side > *,
 body.reduced .hero-side > * {
- opacity: 1 !important;
- transform: none !important;
+  opacity: 1 !important;
+  transform: none !important;
 }
 body.no-js .hero-frame,
 body.reduced .hero-frame {
- clip-path: none !important;
+  clip-path: none !important;
 }
 
 body.menu-locked {
- overflow: hidden;
+  overflow: hidden;
 }
 
 /* Hide-on-scroll chrome (Nav + Back bar): JS toggles the class inside
@@ -151,7 +165,7 @@ body.menu-locked {
    tree-shaken (no static markup match) — global like .menu-locked. */
 .nav--hidden,
 .backbar--hidden {
- transform: translateY(-100%);
+  transform: translateY(-100%);
 }
 
 /* Scroll depth (ticket 04): once past the Hero the nav gains a frosted
@@ -162,50 +176,50 @@ body.menu-locked {
    headless Chromium, and the computed color is identical either way
    (#f0efe9 at 82%). */
 #nav {
- background: transparent;
- transition:
-  transform 0.45s var(--ease-out),
-  background-color 0.35s var(--ease-out);
+  background: transparent;
+  transition:
+    transform 0.45s var(--ease-out),
+    background-color 0.35s var(--ease-out);
 }
 #nav.nav--scrolled {
- background: #f0efe9d1;
- backdrop-filter: blur(12px);
- -webkit-backdrop-filter: blur(12px);
+  background: #f0efe9d1;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 #nav nav a[aria-current="location"] {
- color: var(--color-ink-black);
+  color: var(--color-ink-black);
 }
 #nav.nav--scrolled .nav-progress {
- /* unlayered base.css loses to layered utilities without this: both are
+  /* unlayered base.css loses to layered utilities without this: both are
     single-class specificity, but @layer puts opacity-0 later in the
     cascade — so this re-affirms the scrolled state, not a specificity
     fight. */
- opacity: 1 !important;
+  opacity: 1 !important;
 }
 
 /* Dedicated masks for menu links - never touched by the page-level line gate */
 .menu-mask {
- display: block;
- overflow: hidden;
- padding-bottom: 0.08em;
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
 }
 .menu-line {
- display: inline-block;
- will-change: transform;
+  display: inline-block;
+  will-change: transform;
 }
 
 @media (max-width: 767px) {
- :root {
-  --nav-h: 60px;
-  --pad: 20px;
- }
+  :root {
+    --nav-h: 60px;
+    --pad: 20px;
+  }
 }
 
 /* Desktop-only preview layer */
 @media (pointer: coarse) {
- .services-preview {
-  display: none;
- }
+  .services-preview {
+    display: none;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -215,19 +229,19 @@ body.menu-locked {
    preloader can never trap the page once styles.css is deleted) */
 body.no-js .preloader,
 body.reduced .preloader {
- display: none;
+  display: none;
 }
 @media (prefers-reduced-motion: reduce) {
- html {
-  scroll-behavior: auto;
- }
- *,
- *::before,
- *::after {
-  animation: none !important;
-  transition: none !important;
- }
- .preloader {
-  display: none;
- }
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .preloader {
+    display: none;
+  }
 }
