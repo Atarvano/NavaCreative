@@ -21,8 +21,9 @@ export default defineConfig({
         'graphic-design': resolve(rootDir, 'graphic-design.html'),
         'social-media': resolve(rootDir, 'social-media.html'),
         'live-streaming': resolve(rootDir, 'live-streaming.html'),
-        // Rental dashboard (ticket #40): login page entry.
+        // Rental dashboard: login page + dashboard entries.
         login: resolve(rootDir, 'login.html'),
+        dashboard: resolve(rootDir, 'dashboard.html'),
       },
     },
   },
