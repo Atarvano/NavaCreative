@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { authRoutes, guardApi } from './auth.js';
 import { alatRoutes } from './alat.js';
+import { paketRoutes } from './paket.js';
 
 // Single Worker (ADR-0011): the Hono app owns /api/* only. Static files
 // (dist/ via the wrangler `assets` directory) are served by Cloudflare
@@ -10,6 +11,7 @@ const app = new Hono();
 
 authRoutes(app);
 alatRoutes(app);
+paketRoutes(app);
 guardApi(app);
 
 app.notFound((c) => c.json({ error: 'Tidak ditemukan.' }, 404));
