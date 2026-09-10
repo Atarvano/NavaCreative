@@ -27,6 +27,7 @@ const MIME = {
 // jenis=alat rows per Q13; transaksi tables land in #44, stub fakes it).
 const STUB = {
   '/api/auth/me': { username: 'admin' },
+  '/api/settings': { settings: { nama: 'Nava Production', hp: '085817999140', email: 'navaproduction9@gmail.com', bank: 'BCA', norek: '8335463109', atas_nama: 'Luthfi Ahmad Zaidan' } },
   '/api/alat': {
     alat: [
       { id: 1, nama: 'Sony NXR-100', harga_beli: 10_000_000, tarif_event: 350_000, is_active: 1, modal: 12_000_000, pendapatan: 12_000_000, balik_modal: true },
@@ -48,6 +49,19 @@ const STUB = {
         subtotal: { PRODUCTION: 2080000, LOGISTIK: 150000, MISC: 150000 },
         baris: [
           { id: 9, kategori: 'PRODUCTION', jenis: 'alat', nama: 'SONY NXR-100', qty: 1, satuan: 'Unit', harga_satuan: 350000 },
+        ],
+      },
+    ],
+  },
+  '/api/rab': {
+    rab: [
+      {
+        id: 1, nomor: 'RAB-2026-0001', nama_project: 'Nikahan Soleh', tanggal_rab: '2026-08-02',
+        nama_client: 'Soleh Permana', perusahaan_client: '', status: 'sent', diskon: 50000, total: 3250000, catatan: '',
+        subtotal: { PRODUCTION: 3200000, LOGISTIK: 100000 },
+        baris: [
+          { id: 1, kategori: 'PRODUCTION', jenis: 'alat', nama: 'Live Streaming 2 camera', qty: 1, satuan: 'Hari', harga_satuan: 3200000 },
+          { id: 2, kategori: 'LOGISTIK', jenis: 'biaya', nama: 'Transportasi', qty: 1, satuan: 'Hari', harga_satuan: 100000 },
         ],
       },
     ],
@@ -116,6 +130,9 @@ for (const [label, w, h] of [['desktop', 1280, 800], ['mobile', 390, 844]]) {
       ['paket 1 row', body.includes('Paket 1 Camera')],
       ['paket 1 total', body.includes('Rp 1.415.000')],
       ['paket 2 row', body.includes('Paket 2 Camera')],
+      ['rab row', body.includes('RAB-2026-0001')],
+      ['rab total', body.includes('Rp 3.250.000')],
+      ['setujui button', body.includes('Setujui')],
     ];
     const bad = checks.filter(([, v]) => !v).map(([n]) => n);
     if (bad.length) fail(`${label} dashboard: missing ${bad.join(', ')}`);
