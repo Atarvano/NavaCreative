@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nava-dashboard",
+  "compatibility_date": "2026-09-01",
+  "main": "api/index.js",
+  "assets": { "directory": "./dist" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nava-db",
+      // Remote needs a database_id: run `wrangler d1 create nava-db` once
+      // logged in, then add it here. Local dev works without it.
+      "migrations_dir": "api/migrations"
+    }
+  ]
+}
