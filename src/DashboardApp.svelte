@@ -76,6 +76,8 @@
     if (rr.res.ok) rabs = rr.data.rab;
     const tr = await api('/api/transaksi');
     if (tr.res.ok) transaksi = tr.data.transaksi;
+    const ir = await api('/api/invoice');
+    if (ir.res.ok) invoices = ir.data.invoice;
     // Identity auto-fill source (Q23); print views read from here.
     const sr = await api('/api/settings');
     if (sr.res.ok) settings = sr.data.settings;
@@ -362,6 +364,94 @@
       notice = data.bentrok?.length ? `Bentrok: ${data.bentrok.map((b) => b.nama_project).join(', ')}.` : `${t.nama_project} → ${status}.`;
       await load();
     }
+  }
+
+  // --- Invoice (#45): terbit dari transaksi, bayar, void, cetak ---
+  let invoices = $state([]);
+  let openInvoiceId = $state(null);
+  let invDetail = $state(null);
+  let byTanggal = $state(new Date().toISOString().slice(0, 10));
+  let byJumlah = $state('');
+  let byMetode = $state('transfer');
+  let jatuhTempo = $state('');
+
+  async function terbitkan(t) {
+    const jt = jatuhTempo || new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+    const { res, data } = await api(`/api/transaksi/${t.id}/invoice`, {
+      method: 'POST',
+      body: JSON.stringify({ jatuh_tempo: jt }),
+    });
+    if (!res.ok) error = data.error ?? 'Gagal menerbitkan invoice.';
+    else {
+      notice = `${data.nomor} terbit. Baris transaksi dikunci.`;
+      jatuhTempo = '';
+      await load();
+    }
+  }
+
+  async function bukaInvoice(i) {
+    openInvoiceId = openInvoiceId === i.id ? null : i.id;
+    invDetail = null;
+    if (openInvoiceId) {
+      const { res, data } = await api(`/api/invoice/${i.id}`);
+      if (res.ok) invDetail = data;
+    }
+  }
+
+  async function bayar(i, e) {
+    e.preventDefault();
+    error = '';
+    const { res, data } = await api(`/api/invoice/${i.id}/bayar`, {
+      method: 'POST',
+      body: JSON.stringify({ tanggal: byTanggal, jumlah: Number(byJumlah), metode: byMetode }),
+    });
+    if (!res.ok) {
+      error = data.error ?? 'Gagal mencatat pembayaran.';
+      return;
+    }
+    notice = `Terbayar ${rupiah(data.dibayar)}, sisa ${rupiah(data.sisa)}.`;
+    byJumlah = '';
+    invDetail = { ...data, transaksi: invDetail?.transaksi, baris: invDetail?.baris ?? [] };
+    await load();
+  }
+
+  async function voidInvoice(i) {
+    if (!confirm(`Batalkan ${i.nomor}? Riwayat tetap tersimpan.`)) return;
+    const { res, data } = await api(`/api/invoice/${i.id}/batal`, { method: 'POST' });
+    if (!res.ok) error = data.error ?? 'Gagal membatalkan.';
+    else {
+      notice = `${i.nomor} dibatalkan.`;
+      await load();
+    }
+  }
+
+  function printInvoice() {
+    const i = invDetail;
+    if (!i) return;
+    const rows = (i.baris ?? [])
+      .map((b) => `<tr><td>${b.nama}</td><td>${b.qty} ${b.satuan}</td><td style="text-align:right">${rupiah(b.qty * b.harga_satuan)}</td></tr>`)
+      .join('');
+    const pays = (i.bayar ?? []).map((p) => `<tr><td>${p.tanggal} (${p.label})</td><td style="text-align:right">${rupiah(p.jumlah)}</td></tr>`).join('');
+    const s = settings;
+    const w = window.open('', '_blank');
+    w.document.write(`<html lang="id"><head><title>${i.nomor}</title></head><body onload="print()" style="font-family:sans-serif;max-width:640px;margin:32px auto">
+      <h1>INVOICE</h1>
+      <p>${i.nomor} · Terbit ${i.tanggal_terbit}</p>
+      <p><b>DARI</b><br>${s.nama ?? ''}<br>${s.hp ?? ''}<br>${s.email ?? ''}</p>
+      <p><b>KEPADA</b><br>${i.transaksi?.nama_client ?? ''}</p>
+      <table style="width:100%;border-collapse:collapse" border="1" cellpadding="8"><tr><th>DESKRIPSI</th><th>QTY</th><th>SUBTOTAL</th></tr>${rows}</table>
+      <p><b>TOTAL: ${rupiah(i.total)}</b><br>Dibayar: ${rupiah(i.dibayar)} · Sisa: ${rupiah(i.sisa)}</p>
+      ${pays ? `<table style="width:100%;border-collapse:collapse" border="1" cellpadding="8"><tr><th>PEMBAYARAN</th><th>JUMLAH</th></tr>${pays}</table>` : ''}
+      <p><b>TRANSFER KE</b><br>Bank: ${s.bank ?? ''}<br>No. Rekening: ${s.norek ?? ''}<br>Atas Nama: ${s.atas_nama ?? ''}</p>
+      <p>Pembayaran paling lambat 7 hari setelah invoice diterima.</p>
+      </body></html>`);
+    w.document.close();
+  }
+
+  function waInvoice() {
+    const i = invDetail;
+    if (!i) return;
+    window.open('https://wa.me/?text=' + encodeURIComponent(`INVOICE ${i.nomor}\nTotal ${rupiah(i.total)}\nDibayar ${rupiah(i.dibayar)} · Sisa ${rupiah(i.sisa)}\nJatuh tempo ${i.jatuh_tempo}`), '_blank');
   }
 
   async function bukaTransaksi(t) {
@@ -704,6 +794,7 @@
                 {#if t.status === 'terjadwal'}<button class="underline" onclick={() => statusTransaksi(t, 'berjalan')}>Mulai</button>{/if}
                 {#if t.status === 'berjalan'}<button class="underline" onclick={() => statusTransaksi(t, 'selesai')}>Selesai</button>{/if}
                 {#if t.status !== 'batal' && t.status !== 'selesai'}<button class="underline" onclick={() => statusTransaksi(t, 'batal')}>Batal</button>{/if}
+                {#if !t.invoice_terbit}<button class="underline" onclick={() => terbitkan(t)}>Terbitkan invoice</button>{/if}
                 {#if openTransaksiId === t.id}
                   <button class="underline" onclick={() => printBrief(t)}>Cetak brief</button>
                   <button class="underline" onclick={() => waBrief(t)}>WA brief</button>
@@ -724,6 +815,49 @@
                   <label class="grid gap-1 text-body-sm">DON'T<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={brForm.donts} /></label>
                   <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white justify-self-start md:col-span-2" type="submit">Simpan brief</button>
                 </form>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+    <section class="mt-12">
+      <h2 class="text-subheading font-normal">Invoice</h2>
+      {#if !invoices.length}
+        <p class="mt-4 text-body-sm text-graphite">Belum ada invoice. Terbitkan dari Transaksi lewat tombol “Terbitkan invoice”.</p>
+      {:else}
+        <ul class="mt-4 grid gap-4">
+          {#each invoices as i (i.id)}
+            <li class="border border-ash bg-bone-white p-4">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <p class="text-body font-normal">{i.nomor}</p>
+                <span class="rounded-pill border border-ash px-3 py-1 text-caption text-graphite">{i.status}{i.overdue ? ' · overdue' : ''}</span>
+              </div>
+              <p class="mt-1 text-body-sm text-graphite">Total {rupiah(i.total)} · Dibayar {rupiah(i.dibayar)} · Sisa {rupiah(i.sisa)} · Tempo {i.jatuh_tempo}</p>
+              <div class="mt-2 flex flex-wrap gap-4 text-body-sm">
+                <button class="underline" onclick={() => bukaInvoice(i)}>{openInvoiceId === i.id ? 'Tutup' : 'Bayar & rincian'}</button>
+                {#if i.status !== 'paid' && i.status !== 'batal'}<button class="underline" onclick={() => voidInvoice(i)}>Batalkan</button>{/if}
+                {#if openInvoiceId === i.id}
+                  <button class="underline" onclick={printInvoice}>Cetak</button>
+                  <button class="underline" onclick={waInvoice}>WA</button>
+                {/if}
+              </div>
+              {#if openInvoiceId === i.id}
+                {#if invDetail}
+                  {#if invDetail.bayar.length}
+                    <ul class="mt-3 grid gap-1 border-t border-ash pt-3 text-body-sm">
+                      {#each invDetail.bayar as p (p.id)}
+                        <li class="flex justify-between gap-2"><span>{p.tanggal} ({p.label}) — {p.metode}</span><span>{rupiah(p.jumlah)}</span></li>
+                      {/each}
+                    </ul>
+                  {/if}
+                  <form class="mt-3 grid gap-3 max-md:grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end" onsubmit={(e) => bayar(i, e)}>
+                    <label class="grid gap-1 text-body-sm">Tanggal<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" required bind:value={byTanggal} /></label>
+                    <label class="grid gap-1 text-body-sm">Jumlah (Rp, minus = koreksi)<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" step="1" required bind:value={byJumlah} /></label>
+                    <label class="grid gap-1 text-body-sm">Metode<select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={byMetode}><option value="transfer">transfer</option><option value="cash">cash</option></select></label>
+                    <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white" type="submit">Catat bayar</button>
+                  </form>
+                {/if}
               {/if}
             </li>
           {/each}

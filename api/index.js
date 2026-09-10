@@ -4,6 +4,7 @@ import { alatRoutes } from './alat.js';
 import { paketRoutes } from './paket.js';
 import { rabRoutes } from './rab.js';
 import { transaksiRoutes } from './transaksi.js';
+import { invoiceRoutes } from './invoice.js';
 import { settingsRoutes } from './settings.js';
 
 // Single Worker (ADR-0011): the Hono app owns /api/* only. Static files
@@ -17,6 +18,7 @@ alatRoutes(app);
 paketRoutes(app);
 rabRoutes(app);
 transaksiRoutes(app);
+invoiceRoutes(app);
 settingsRoutes(app);
 guardApi(app);
 

@@ -121,12 +121,15 @@ export function transaksiRoutes(app) {
   });
 
   // Lifecycle: any -> any of STATUS. batal keeps history (no DELETE).
-  // Baris editable until #45 locks them on invoice issue.
+  // Money fields (baris/diskon) lock once the invoice issues (Q21):
+  // rejected loudly so no edit is silently dropped.
   app.patch('/api/transaksi/:id', requireSession, async (c) => {
     const id = Number(c.req.param('id'));
     const cur = await c.env.DB.prepare('SELECT * FROM transaksi WHERE id = ?').bind(id).first();
     if (!cur) return c.json({ error: 'Transaksi tidak ditemukan.' }, 404);
     const body = await c.req.json().catch(() => ({}));
+    if (cur.invoice_terbit && (body.baris !== undefined || body.diskon !== undefined))
+      return c.json({ error: 'Baris terkunci: invoice sudah terbit.' }, 409);
     if (body.status !== undefined) {
       if (!STATUS.includes(body.status)) return c.json({ error: 'status tidak dikenal.' }, 400);
       await c.env.DB.prepare("UPDATE transaksi SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
