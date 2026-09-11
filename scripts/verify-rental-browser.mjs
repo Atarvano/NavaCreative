@@ -33,6 +33,25 @@ const STUB = {
       { id: 2, nama: 'Tripod B-18', harga_beli: 500_000, tarif_event: 50_000, is_active: 1, modal: 500_000, pendapatan: 0, balik_modal: false },
     ],
   },
+  '/api/paket': {
+    paket: [
+      {
+        id: 1, nama: 'Paket 1 Camera', deskripsi: '', total: 1415000,
+        subtotal: { PRODUCTION: 1115000, LOGISTIK: 150000, MISC: 150000 },
+        baris: [
+          { id: 1, kategori: 'PRODUCTION', jenis: 'alat', nama: 'SONY FDR AX-40', qty: 1, satuan: 'Unit', harga_satuan: 100000 },
+          { id: 6, kategori: 'PRODUCTION', jenis: 'jasa', nama: 'OPERATOR', qty: 2, satuan: 'Orang', harga_satuan: 250000 },
+        ],
+      },
+      {
+        id: 2, nama: 'Paket 2 Camera', deskripsi: '', total: 2380000,
+        subtotal: { PRODUCTION: 2080000, LOGISTIK: 150000, MISC: 150000 },
+        baris: [
+          { id: 9, kategori: 'PRODUCTION', jenis: 'alat', nama: 'SONY NXR-100', qty: 1, satuan: 'Unit', harga_satuan: 350000 },
+        ],
+      },
+    ],
+  },
 };
 
 const server = createServer((req, res) => {
@@ -79,7 +98,7 @@ for (const [label, w, h] of [['desktop', 1280, 800], ['mobile', 390, 844]]) {
     else ok(`${label} login renders, 0 console errors`);
     await page.close();
   }
-  // Dashboard: alat list + both badge states render, no console errors.
+  // Dashboard: alat list + badges + paket list, no console errors.
   {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
     const errs = [];
@@ -94,11 +113,14 @@ for (const [label, w, h] of [['desktop', 1280, 800], ['mobile', 390, 844]]) {
       ['unpaid badge', body.includes('Belum balik modal')],
       ['modal math shown', body.includes('Rp 12.000.000')],
       ['add form', (await page.locator('input[name=nama]').count()) === 1],
+      ['paket 1 row', body.includes('Paket 1 Camera')],
+      ['paket 1 total', body.includes('Rp 1.415.000')],
+      ['paket 2 row', body.includes('Paket 2 Camera')],
     ];
     const bad = checks.filter(([, v]) => !v).map(([n]) => n);
     if (bad.length) fail(`${label} dashboard: missing ${bad.join(', ')}`);
     else if (errs.length) fail(`${label} dashboard: console errors: ${errs.join(' // ')}`);
-    else ok(`${label} dashboard renders (badges + math), 0 console errors`);
+    else ok(`${label} dashboard renders (alat badges + paket), 0 console errors`);
     await page.close();
   }
 }

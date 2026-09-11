@@ -1,11 +1,13 @@
 <script>
-  // DashboardApp: ticket #41 scope = Alat view only. Full multi-view shell
-  // (Ringkasan, Transaksi, RAB, Invoice, Paket, Brief, Settings) lands in
-  // #46. Unauthenticated visits bounce to login.html via /api/auth/me.
+  // DashboardApp: ticket #41 = Alat view, ticket #42 = Paket view (read +
+  // expand rows, create/edit full paket lands with RAB builder in #43).
+  // Full multi-view shell (Ringkasan, Transaksi, RAB, Invoice, Brief,
+  // Settings) lands in #46. Unauthenticated visits bounce to login.html.
   import { onMount } from 'svelte';
 
   let me = $state(null);
   let alat = $state([]);
+  let paket = $state([]);
   let error = $state('');
   let notice = $state('');
   let busy = $state(false);
@@ -21,6 +23,9 @@
   let svTanggal = $state('');
   let svKeterangan = $state('');
   let svBiaya = $state('');
+
+  // Per-paket expandable rows (#42: read-only rows + subtotals).
+  let openPaketId = $state(null);
 
   const rupiah = (n) => 'Rp ' + Number(n).toLocaleString('id-ID');
 
@@ -44,6 +49,8 @@
       return;
     }
     alat = data.alat;
+    const pr = await api('/api/paket');
+    if (pr.res.ok) paket = pr.data.paket;
   }
 
   onMount(async () => {
@@ -233,6 +240,43 @@
                     </label>
                     <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white" type="submit">Catat</button>
                   </form>
+                </div>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+    <section class="mt-12">
+      <h2 class="text-subheading font-normal">Paket live streaming</h2>
+      {#if !paket.length}
+        <p class="mt-4 text-body-sm text-graphite">Belum ada paket.</p>
+      {:else}
+        <ul class="mt-4 grid gap-4">
+          {#each paket as p (p.id)}
+            <li class="border border-ash bg-bone-white p-4">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <p class="text-body font-normal">{p.nama}</p>
+                <p class="text-body-sm">{rupiah(p.total)}</p>
+              </div>
+              <button class="mt-2 text-body-sm underline" onclick={() => (openPaketId = openPaketId === p.id ? null : p.id)}>
+                {openPaketId === p.id ? 'Tutup rincian' : `Lihat ${p.baris.length} baris`}
+              </button>
+              {#if openPaketId === p.id}
+                <div class="mt-3 border-t border-ash pt-3">
+                  <ul class="grid gap-1 text-body-sm">
+                    {#each p.baris as b (b.id)}
+                      <li class="flex justify-between gap-2">
+                        <span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis}]</span></span>
+                        <span>{rupiah(b.qty * b.harga_satuan)}</span>
+                      </li>
+                    {/each}
+                  </ul>
+                  <p class="mt-2 text-body-sm text-graphite">
+                    {#each Object.entries(p.subtotal) as [k, v] (k)}
+                      {k} {rupiah(v)} ·
+                    {/each}
+                  </p>
                 </div>
               {/if}
             </li>
