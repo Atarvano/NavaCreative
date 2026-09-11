@@ -92,7 +92,7 @@
       }
       me = (await meRes.json()).username;
       await load();
-      await bukaView('ringkasan');
+      await tampilkan(viewDariHash() ?? 'ringkasan');
     } catch {
       error = 'Tidak bisa menghubungi server.';
     }
@@ -300,12 +300,6 @@
     w.document.close();
   }
 
-  function waRab(r) {
-    const lines = r.baris.map((b) => `- ${b.nama} × ${b.qty}: ${rupiah(b.qty * b.harga_satuan)}`).join('\n');
-    const text = `RAB ${r.nomor}\n${r.nama_project} — ${r.nama_client}\n${lines}\nTOTAL: ${rupiah(r.total)}`;
-    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
-  }
-
   // --- Transaksi walk-in + lifecycle + Brief (#44) ---
   let txProject = $state('');
   let txClient = $state('');
@@ -449,12 +443,6 @@
     w.document.close();
   }
 
-  function waInvoice() {
-    const i = invDetail;
-    if (!i) return;
-    window.open('https://wa.me/?text=' + encodeURIComponent(`INVOICE ${i.nomor}\nTotal ${rupiah(i.total)}\nDibayar ${rupiah(i.dibayar)} · Sisa ${rupiah(i.sisa)}\nJatuh tempo ${i.jatuh_tempo}`), '_blank');
-  }
-
   async function bukaTransaksi(t) {
     openTransaksiId = openTransaksiId === t.id ? null : t.id;
     brief = null;
@@ -494,25 +482,18 @@
     w.document.close();
   }
 
-  function waBrief(t) {
-    const b = brief ?? {};
-    window.open('https://wa.me/?text=' + encodeURIComponent(`BRIEF ${t.nama_project}\n${b.objective ?? ''}\nLokasi: ${b.lokasi ?? ''}\nDeadline: ${b.deadline ?? ''}`), '_blank');
-  }
-  // --- Shell #46: view nav + ringkasan + settings form ---
+  // --- Shell #54 (ADR-0012): sidebar + drawer + hash nav + banner ---
   let view = $state('ringkasan');
   let ringkasan = $state(null);
   let setForm = $state({});
-  const VIEWS = [
-    ['ringkasan', 'Ringkasan'],
-    ['alat', 'Alat'],
-    ['paket', 'Paket'],
-    ['rab', 'RAB'],
-    ['transaksi', 'Transaksi'],
-    ['invoice', 'Invoice'],
-    ['settings', 'Settings'],
+  const NAV = [
+    ['OPERASIONAL', [['ringkasan', 'Ringkasan'], ['transaksi', 'Transaksi'], ['rab', 'RAB'], ['invoice', 'Invoice'], ['paket', 'Paket']]],
+    ['MASTER', [['alat', 'Alat']]],
   ];
+  const VIEW_KEYS = [...NAV.flatMap(([, g]) => g.map(([k]) => k)), 'settings'];
 
-  async function bukaView(v) {
+  async function tampilkan(v) {
+    if (!VIEW_KEYS.includes(v)) v = 'ringkasan';
     view = v;
     if (v === 'ringkasan') {
       const { res, data } = await api('/api/ringkasan');
@@ -520,6 +501,79 @@
     }
     if (v === 'settings') setForm = { ...settings };
   }
+
+  function go(v) {
+    location.hash = '#/' + v;
+  }
+  const viewDariHash = () => (location.hash.match(/^#\/([\w-]+)/) ?? [])[1];
+
+  // Badge sidebar (Q29): invoice belum-lunas (merah bila ada overdue,
+  // kuning selain itu), transaksi aktif (navy). 0 = badge hilang.
+  const invBelumLunas = $derived(invoices.filter((i) => i.status !== 'paid' && i.status !== 'batal'));
+  const invOverdue = $derived(invBelumLunas.some((i) => i.overdue));
+  const txAktif = $derived(transaksi.filter((t) => t.status === 'terjadwal' || t.status === 'berjalan').length);
+
+  // Drawer (Q36): tutup via pilih menu, back, Esc, klik-luar. Back
+  // ditangkap dengan satu pushState saat buka; popstate menutup drawer,
+  // dan bila ada view tertunda hash diset SETELAH back selesai supaya
+  // tidak ada entri history mati.
+  let drawerOpen = $state(false);
+  let drawerPushed = false;
+  let pendingView = null;
+
+  function bukaDrawer() {
+    if (drawerOpen) return;
+    drawerOpen = true;
+    drawerPushed = true;
+    history.pushState({ drawer: 1 }, '');
+  }
+  function tutupDrawer() {
+    if (!drawerOpen) return;
+    drawerOpen = false;
+    if (drawerPushed) {
+      drawerPushed = false;
+      history.back();
+    }
+  }
+  function pilih(v) {
+    if (!drawerOpen) return go(v);
+    pendingView = v;
+    tutupDrawer();
+  }
+  window.addEventListener('popstate', () => {
+    drawerPushed = false;
+    drawerOpen = false;
+    if (pendingView) {
+      const v = pendingView;
+      pendingView = null;
+      go(v);
+    }
+  });
+  window.addEventListener('hashchange', () => tampilkan(viewDariHash() ?? 'ringkasan'));
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') tutupDrawer();
+  });
+
+  // Banner sticky (Q37): notice hijau auto 6 dtk, error merah menetap.
+  $effect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => (notice = ''), 6000);
+    return () => clearTimeout(t);
+  });
+
+  // Chip status 3 warna + teks (Q11): hijau selesai, kuning berjalan,
+  // merah bahaya. Teks status tetap tampil di sebelah warna.
+  const chipCls = (status, overdue = false) => {
+    if (overdue || status === 'batal' || status === 'rejected') return 'bg-magenta-bloom text-bone-white';
+    if (status === 'paid' || status === 'approved' || status === 'selesai') return 'bg-forest-teal text-bone-white';
+    return 'bg-signal-yellow text-ink-black';
+  };
+
+  // Tanggal tampil Indonesia pendek (Q30): 2 Agu 2026. Input tetap date.
+  const tgl = (iso) =>
+    iso
+      ? new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '';
 
   async function simpanSettings(e) {
     e.preventDefault();
@@ -533,29 +587,76 @@
   }
 </script>
 
-<main class="min-h-dvh bg-canvas px-(--pad) py-8">
-  <div class="mx-auto w-full max-w-3xl">
-    <header class="flex items-baseline justify-between gap-4">
-      <div>
-        <p class="text-subheading font-normal">Nava Creative</p>
-        <h1 class="mt-1 text-heading-sm font-light">Dashboard</h1>
-      </div>
-      <div class="flex items-center gap-3 text-body-sm">
-        {#if me}<span class="text-graphite">{me}</span>{/if}
-        <button class="underline" onclick={logout}>Keluar</button>
-      </div>
-    </header>
-    <nav class="mt-6 flex flex-wrap gap-2" aria-label="Dashboard">
-      {#each VIEWS as [v, label] (v)}
-        <button
-          class="rounded-pill px-4 py-2 text-body-sm {view === v ? 'bg-navy-ink text-bone-white' : 'border border-ash'}"
-          aria-current={view === v ? 'page' : undefined}
-          onclick={() => bukaView(v)}>{label}</button>
-      {/each}
-    </nav>
+{#snippet navItem(v, label)}
+  <button
+    class="flex w-full items-center justify-between gap-2 rounded-none px-4 py-2.5 text-left text-body-sm {view === v ? 'bg-navy-ink text-bone-white' : 'text-ink-black hover:bg-canvas'}"
+    aria-current={view === v ? 'page' : undefined}
+    onclick={() => pilih(v)}
+  >
+    {label}
+    {#if v === 'invoice' && invBelumLunas.length}
+      <span data-badge-invoice class="rounded-pill px-2 py-0.5 text-caption {invOverdue ? 'bg-magenta-bloom text-bone-white' : 'bg-signal-yellow text-ink-black'}">{invBelumLunas.length}</span>
+    {:else if v === 'transaksi' && txAktif}
+      <span data-badge-transaksi class="rounded-pill bg-navy-ink px-2 py-0.5 text-caption text-bone-white">{txAktif}</span>
+    {/if}
+  </button>
+{/snippet}
 
-    {#if error}<p role="alert" class="mt-4 text-body-sm text-magenta-bloom">{error}</p>{/if}
-    {#if notice}<p role="status" class="mt-4 text-body-sm text-forest-teal">{notice}</p>{/if}
+{#snippet sidebar()}
+  <p class="px-4 pt-5 pb-2 text-subheading font-normal">Nava</p>
+  <nav class="flex-1 overflow-y-auto px-2 pb-4" aria-label="Dashboard">
+    {#each NAV as [group, items] (group)}
+      <p class="px-4 pt-4 pb-1 text-caption uppercase text-graphite">{group}</p>
+      {#each items as [v, label] (v)}
+        {@render navItem(v, label)}
+      {/each}
+    {/each}
+    <div class="mt-4 border-t border-ash"></div>
+    {@render navItem('settings', 'Settings')}
+  </nav>
+  <div class="border-t border-ash px-4 py-3">
+    {#if me}<p class="text-body-sm text-graphite">{me}</p>{/if}
+    <button class="mt-1 text-body-sm underline" onclick={logout}>Keluar</button>
+  </div>
+{/snippet}
+
+<!-- Sidebar desktop, fixed ~260px (ADR-0012) -->
+<aside data-sidebar class="fixed inset-y-0 left-0 z-40 hidden w-[260px] flex-col border-r border-ash bg-bone-white md:flex">
+  {@render sidebar()}
+</aside>
+
+<!-- Topbar mobile: hamburger + Nava + user -->
+<header class="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-ash bg-bone-white px-4 md:hidden">
+  <button class="-ml-2 p-2" aria-label="Buka menu" onclick={bukaDrawer}>
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 4h16M2 10h16M2 16h16" stroke="currentColor" stroke-width="2" /></svg>
+  </button>
+  <p class="text-subheading font-normal">Nava</p>
+  <span class="text-body-sm text-graphite">{me}</span>
+</header>
+
+<!-- Drawer overlay mobile -->
+{#if drawerOpen}
+  <div class="fixed inset-0 z-50 md:hidden">
+    <button class="absolute inset-0 bg-navy-ink/60" aria-label="Tutup menu" onclick={tutupDrawer}></button>
+    <div data-drawer class="absolute inset-y-0 left-0 flex w-[260px] flex-col bg-bone-white">
+      {@render sidebar()}
+    </div>
+  </div>
+{/if}
+
+<div class="min-h-dvh bg-canvas md:pl-[260px]">
+  <!-- Banner sticky (Q37): error merah menetap, notice hijau auto 6 dtk -->
+  {#if error || notice}
+    <div
+      class="sticky top-14 z-30 flex items-center justify-between gap-4 px-(--pad) py-3 text-body-sm text-bone-white md:top-0 {error ? 'bg-magenta-bloom' : 'bg-forest-teal'}"
+      role={error ? 'alert' : 'status'}
+    >
+      <span>{error || notice}</span>
+      <button class="shrink-0 underline" aria-label="Tutup notifikasi" onclick={() => { error = ''; notice = ''; }}>✕</button>
+    </div>
+  {/if}
+
+  <main class="px-(--pad) py-6">
 
     {#if view === 'alat'}
     <section class="mt-8">
@@ -616,7 +717,7 @@
                   {:else}
                     <ul class="grid gap-2 text-body-sm">
                       {#each servisRows as s (s.id)}
-                        <li>{s.tanggal} — {s.keterangan || '(tanpa keterangan)'} — {rupiah(s.biaya)}</li>
+                        <li>{tgl(s.tanggal)} — {s.keterangan || '(tanpa keterangan)'} — {rupiah(s.biaya)}</li>
                       {/each}
                     </ul>
                   {/if}
@@ -765,7 +866,7 @@
             <li class="border border-ash bg-bone-white p-4">
               <div class="flex flex-wrap items-baseline justify-between gap-2">
                 <p class="text-body font-normal">{r.nomor} — {r.nama_project}</p>
-                <span class="rounded-pill border border-ash px-3 py-1 text-caption text-graphite">{r.status}</span>
+                <span class="rounded-pill px-3 py-1 text-caption {chipCls(r.status)}">{r.status}</span>
               </div>
               <p class="mt-1 text-body-sm text-graphite">{r.nama_client} · {rupiah(r.total)}</p>
               <div class="mt-2 flex flex-wrap gap-4 text-body-sm">
@@ -779,7 +880,6 @@
                   <button class="underline" onclick={() => statusRab(r, 'draft')}>Revisi</button>
                 {/if}
                 <button class="underline" onclick={() => printRab(r)}>Cetak</button>
-                <button class="underline" onclick={() => waRab(r)}>WA</button>
               </div>
               {#if openRabId === r.id}
                 <ul class="mt-3 grid gap-1 border-t border-ash pt-3 text-body-sm">
@@ -835,9 +935,9 @@
             <li class="border border-ash bg-bone-white p-4">
               <div class="flex flex-wrap items-baseline justify-between gap-2">
                 <p class="text-body font-normal">{t.nama_project}</p>
-                <span class="rounded-pill border border-ash px-3 py-1 text-caption text-graphite">{t.status}</span>
+                <span class="rounded-pill px-3 py-1 text-caption {chipCls(t.status)}">{t.status}</span>
               </div>
-              <p class="mt-1 text-body-sm text-graphite">{t.nama_client}{t.tanggal_mulai ? ` · ${t.tanggal_mulai}` : ''} · {rupiah(t.total)}</p>
+              <p class="mt-1 text-body-sm text-graphite">{t.nama_client}{t.tanggal_mulai ? ` · ${tgl(t.tanggal_mulai)}` : ''} · {rupiah(t.total)}</p>
               <div class="mt-2 flex flex-wrap gap-4 text-body-sm">
                 <button class="underline" onclick={() => bukaTransaksi(t)}>{openTransaksiId === t.id ? 'Tutup' : 'Brief & rincian'}</button>
                 {#if t.status === 'terjadwal'}<button class="underline" onclick={() => statusTransaksi(t, 'berjalan')}>Mulai</button>{/if}
@@ -846,7 +946,6 @@
                 {#if !t.invoice_terbit}<button class="underline" onclick={() => terbitkan(t)}>Terbitkan invoice</button>{/if}
                 {#if openTransaksiId === t.id}
                   <button class="underline" onclick={() => printBrief(t)}>Cetak brief</button>
-                  <button class="underline" onclick={() => waBrief(t)}>WA brief</button>
                 {/if}
               </div>
               {#if openTransaksiId === t.id}
@@ -882,15 +981,14 @@
             <li class="border border-ash bg-bone-white p-4">
               <div class="flex flex-wrap items-baseline justify-between gap-2">
                 <p class="text-body font-normal">{i.nomor}</p>
-                <span class="rounded-pill border border-ash px-3 py-1 text-caption text-graphite">{i.status}{i.overdue ? ' · overdue' : ''}</span>
+                <span class="rounded-pill px-3 py-1 text-caption {chipCls(i.status, i.overdue)}">{i.status}{i.overdue ? ' · overdue' : ''}</span>
               </div>
-              <p class="mt-1 text-body-sm text-graphite">Total {rupiah(i.total)} · Dibayar {rupiah(i.dibayar)} · Sisa {rupiah(i.sisa)} · Tempo {i.jatuh_tempo}</p>
+              <p class="mt-1 text-body-sm text-graphite">Total {rupiah(i.total)} · Dibayar {rupiah(i.dibayar)} · Sisa {rupiah(i.sisa)} · Tempo {tgl(i.jatuh_tempo)}</p>
               <div class="mt-2 flex flex-wrap gap-4 text-body-sm">
                 <button class="underline" onclick={() => bukaInvoice(i)}>{openInvoiceId === i.id ? 'Tutup' : 'Bayar & rincian'}</button>
                 {#if i.status !== 'paid' && i.status !== 'batal'}<button class="underline" onclick={() => voidInvoice(i)}>Batalkan</button>{/if}
                 {#if openInvoiceId === i.id}
                   <button class="underline" onclick={printInvoice}>Cetak</button>
-                  <button class="underline" onclick={waInvoice}>WA</button>
                 {/if}
               </div>
               {#if openInvoiceId === i.id}
@@ -898,7 +996,7 @@
                   {#if invDetail.bayar.length}
                     <ul class="mt-3 grid gap-1 border-t border-ash pt-3 text-body-sm">
                       {#each invDetail.bayar as p (p.id)}
-                        <li class="flex justify-between gap-2"><span>{p.tanggal} ({p.label}) — {p.metode}</span><span>{rupiah(p.jumlah)}</span></li>
+                        <li class="flex justify-between gap-2"><span>{tgl(p.tanggal)} ({p.label}) — {p.metode}</span><span>{rupiah(p.jumlah)}</span></li>
                       {/each}
                     </ul>
                   {/if}
@@ -937,7 +1035,7 @@
           <h3 class="mt-8 text-body font-normal">Belum lunas</h3>
           <ul class="mt-2 grid gap-2">
             {#each ringkasan.belum_lunas as b (b.id)}
-              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{b.nomor} · tempo {b.jatuh_tempo}</span><span>{rupiah(b.sisa)}</span></li>
+              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{b.nomor} · tempo {tgl(b.jatuh_tempo)}</span><span>{rupiah(b.sisa)}</span></li>
             {/each}
           </ul>
         {/if}
@@ -945,7 +1043,7 @@
           <h3 class="mt-8 text-body font-normal">Overdue</h3>
           <ul class="mt-2 grid gap-2">
             {#each ringkasan.overdue as b (b.id)}
-              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{b.nomor} · tempo {b.jatuh_tempo}</span><span>{rupiah(b.sisa)}</span></li>
+              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{b.nomor} · tempo {tgl(b.jatuh_tempo)}</span><span>{rupiah(b.sisa)}</span></li>
             {/each}
           </ul>
         {/if}
@@ -972,5 +1070,5 @@
       </form>
     </section>
     {/if}
-  </div>
-</main>
+  </main>
+</div>
