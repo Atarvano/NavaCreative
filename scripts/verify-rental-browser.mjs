@@ -28,6 +28,19 @@ const MIME = {
 const STUB = {
   '/api/auth/me': { username: 'admin' },
   '/api/settings': { settings: { nama: 'Nava Production', hp: '085817999140', email: 'navaproduction9@gmail.com', bank: 'BCA', norek: '8335463109', atas_nama: 'Luthfi Ahmad Zaidan' } },
+  '/api/transaksi': {
+    transaksi: [
+      {
+        id: 1, rab_id: null, nama_project: 'Drone Bandar Baru', nama_client: 'Pak Suhaimi', perusahaan_client: '',
+        tanggal_mulai: '2026-08-17', tanggal_selesai: '2026-08-17', lokasi: 'Bandar Baru',
+        status: 'terjadwal', diskon: 0, total: 600000,
+        baris: [
+          { id: 1, kategori: 'PRODUCTION', jenis: 'jasa', nama: 'Jasa Drone', qty: 1, satuan: 'Sesi', harga_satuan: 350000 },
+          { id: 2, kategori: 'PRODUCTION', jenis: 'jasa', nama: 'Jasa Edit', qty: 1, satuan: 'Sesi', harga_satuan: 250000 },
+        ],
+      },
+    ],
+  },
   '/api/alat': {
     alat: [
       { id: 1, nama: 'Sony NXR-100', harga_beli: 10_000_000, tarif_event: 350_000, is_active: 1, modal: 12_000_000, pendapatan: 12_000_000, balik_modal: true },
@@ -133,6 +146,8 @@ for (const [label, w, h] of [['desktop', 1280, 800], ['mobile', 390, 844]]) {
       ['rab row', body.includes('RAB-2026-0001')],
       ['rab total', body.includes('Rp 3.250.000')],
       ['setujui button', body.includes('Setujui')],
+      ['transaksi row', body.includes('Drone Bandar Baru')],
+      ['walk-in form', body.includes('Transaksi walk-in')],
     ];
     const bad = checks.filter(([, v]) => !v).map(([n]) => n);
     if (bad.length) fail(`${label} dashboard: missing ${bad.join(', ')}`);

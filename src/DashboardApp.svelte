@@ -31,6 +31,8 @@
 
   // RAB (#43): list + builder (header + rows, from paket or blank).
   let rabs = $state([]);
+  let transaksi = $state([]);
+  let openTransaksiId = $state(null);
   let openRabId = $state(null);
   let rbProject = $state('');
   let rbTanggal = $state(new Date().toISOString().slice(0, 10));
@@ -72,6 +74,8 @@
     if (pr.res.ok) paket = pr.data.paket;
     const rr = await api('/api/rab');
     if (rr.res.ok) rabs = rr.data.rab;
+    const tr = await api('/api/transaksi');
+    if (tr.res.ok) transaksi = tr.data.transaksi;
     // Identity auto-fill source (Q23); print views read from here.
     const sr = await api('/api/settings');
     if (sr.res.ok) settings = sr.data.settings;
@@ -297,6 +301,111 @@
     const lines = r.baris.map((b) => `- ${b.nama} × ${b.qty}: ${rupiah(b.qty * b.harga_satuan)}`).join('\n');
     const text = `RAB ${r.nomor}\n${r.nama_project} — ${r.nama_client}\n${lines}\nTOTAL: ${rupiah(r.total)}`;
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  }
+
+  // --- Transaksi walk-in + lifecycle + Brief (#44) ---
+  let txProject = $state('');
+  let txClient = $state('');
+  let txMulai = $state('');
+  let txSelesai = $state('');
+  let txLokasi = $state('');
+  let txBaris = $state([]);
+  let txNama = $state('');
+  let txQty = $state('1');
+  let txSatuan = $state('');
+  let txHarga = $state('');
+  let txJenis = $state('jasa');
+  let brief = $state(null);
+  let brForm = $state({});
+
+  function txTambahBaris(e) {
+    e.preventDefault();
+    txBaris = [...txBaris, { kategori: 'PRODUCTION', jenis: txJenis, alat_id: null, nama: txNama.trim(), qty: Number(txQty) || 1, satuan: txSatuan, harga_satuan: Number(txHarga) || 0 }];
+    txNama = '';
+    txQty = '1';
+    txSatuan = '';
+    txHarga = '';
+  }
+
+  async function simpanTransaksi(e) {
+    e.preventDefault();
+    error = '';
+    notice = '';
+    const { res, data } = await api('/api/transaksi', {
+      method: 'POST',
+      body: JSON.stringify({
+        nama_project: txProject, nama_client: txClient,
+        tanggal_mulai: txMulai || undefined, tanggal_selesai: txSelesai || undefined,
+        lokasi: txLokasi, baris: txBaris,
+      }),
+    });
+    if (!res.ok) {
+      error = data.error ?? 'Gagal menyimpan transaksi.';
+      return;
+    }
+    notice = data.bentrok?.length
+      ? `Tersimpan — bentrok dengan ${data.bentrok.map((b) => b.nama_project).join(', ')}.`
+      : 'Transaksi walk-in tersimpan.';
+    txProject = '';
+    txClient = '';
+    txMulai = '';
+    txSelesai = '';
+    txLokasi = '';
+    txBaris = [];
+    await load();
+  }
+
+  async function statusTransaksi(t, status) {
+    const { res, data } = await api(`/api/transaksi/${t.id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+    if (!res.ok) error = data.error ?? 'Gagal ubah status.';
+    else {
+      notice = data.bentrok?.length ? `Bentrok: ${data.bentrok.map((b) => b.nama_project).join(', ')}.` : `${t.nama_project} → ${status}.`;
+      await load();
+    }
+  }
+
+  async function bukaTransaksi(t) {
+    openTransaksiId = openTransaksiId === t.id ? null : t.id;
+    brief = null;
+    if (openTransaksiId) {
+      const { res, data } = await api(`/api/transaksi/${t.id}/brief`);
+      if (res.ok) {
+        brief = data.brief;
+        brForm = { ...(data.brief ?? {}) };
+      }
+    }
+  }
+
+  async function simpanBrief(t, e) {
+    e.preventDefault();
+    const { res, data } = await api(`/api/transaksi/${t.id}/brief`, { method: 'PUT', body: JSON.stringify(brForm) });
+    if (!res.ok) error = data.error ?? 'Gagal menyimpan brief.';
+    else {
+      brief = data.brief;
+      notice = `Brief ${t.nama_project} tersimpan.`;
+    }
+  }
+
+  function printBrief(t) {
+    const b = brief ?? {};
+    const row = (k, v) => (v ? `<p><b>${k}</b><br>${v}</p>` : '');
+    const w = window.open('', '_blank');
+    w.document.write(`<html lang="id"><head><title>Brief — ${t.nama_project}</title></head><body onload="print()" style="font-family:sans-serif;max-width:640px;margin:32px auto">
+      <h1>PROJECT BRIEF</h1>
+      <p>${t.nama_project} · ${t.nama_client}</p>
+      ${row('Objective', b.objective)}${row('Audience', b.audience)}
+      ${row('Style', b.style)}${row('Mood', b.mood)}
+      ${row('DO', b.dos)}${row("DON'T", b.donts)}
+      ${row('Lokasi', b.lokasi)}${row('Talent', b.talent)}
+      ${row('Deliverables', b.deliverables)}${row('Deadline', b.deadline)}
+      ${row('Notes', b.notes)}
+      </body></html>`);
+    w.document.close();
+  }
+
+  function waBrief(t) {
+    const b = brief ?? {};
+    window.open('https://wa.me/?text=' + encodeURIComponent(`BRIEF ${t.nama_project}\n${b.objective ?? ''}\nLokasi: ${b.lokasi ?? ''}\nDeadline: ${b.deadline ?? ''}`), '_blank');
   }
 </script>
 
@@ -544,6 +653,77 @@
                     </li>
                   {/each}
                 </ul>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+    <section class="mt-12">
+      <h2 class="text-subheading font-normal">Transaksi walk-in</h2>
+      <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4" onsubmit={simpanTransaksi}>
+        <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
+          <label class="grid gap-1 text-body-sm">Nama project<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" required bind:value={txProject} placeholder="Drone Bandar Baru" /></label>
+          <label class="grid gap-1 text-body-sm">Nama client<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" required bind:value={txClient} placeholder="Pak Suhaimi" /></label>
+          <label class="grid gap-1 text-body-sm">Tanggal mulai<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" bind:value={txMulai} /></label>
+          <label class="grid gap-1 text-body-sm">Tanggal selesai<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" bind:value={txSelesai} /></label>
+          <label class="grid gap-1 text-body-sm md:col-span-2">Lokasi<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={txLokasi} placeholder="Bandar Baru" /></label>
+        </div>
+        {#if txBaris.length}
+          <ul class="grid gap-1 text-body-sm">
+            {#each txBaris as b, i (i)}
+              <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} <span class="text-graphite">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)} <button type="button" class="underline" onclick={() => (txBaris = txBaris.filter((_, j) => j !== i))}>hapus</button></span></li>
+            {/each}
+          </ul>
+        {/if}
+        <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] md:items-end">
+          <label class="grid gap-1 text-body-sm">Item<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={txNama} placeholder="Jasa Drone" /></label>
+          <label class="grid gap-1 text-body-sm">Jenis<select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={txJenis}><option value="jasa">jasa</option><option value="alat">alat</option><option value="biaya">biaya</option></select></label>
+          <label class="grid gap-1 text-body-sm">Qty<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" min="1" bind:value={txQty} /></label>
+          <label class="grid gap-1 text-body-sm">Harga (Rp)<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" min="0" bind:value={txHarga} /></label>
+          <button type="button" class="rounded-pill border border-ash px-5 py-2 text-body-sm" onclick={txTambahBaris}>+ Baris</button>
+        </div>
+        <button class="rounded-pill bg-navy-ink px-6 py-2 text-body-sm text-bone-white justify-self-start" type="submit">Simpan transaksi</button>
+      </form>
+    </section>
+    <section class="mt-12">
+      <h2 class="text-subheading font-normal">Transaksi</h2>
+      {#if !transaksi.length}
+        <p class="mt-4 text-body-sm text-graphite">Belum ada transaksi.</p>
+      {:else}
+        <ul class="mt-4 grid gap-4">
+          {#each transaksi as t (t.id)}
+            <li class="border border-ash bg-bone-white p-4">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <p class="text-body font-normal">{t.nama_project}</p>
+                <span class="rounded-pill border border-ash px-3 py-1 text-caption text-graphite">{t.status}</span>
+              </div>
+              <p class="mt-1 text-body-sm text-graphite">{t.nama_client}{t.tanggal_mulai ? ` · ${t.tanggal_mulai}` : ''} · {rupiah(t.total)}</p>
+              <div class="mt-2 flex flex-wrap gap-4 text-body-sm">
+                <button class="underline" onclick={() => bukaTransaksi(t)}>{openTransaksiId === t.id ? 'Tutup' : 'Brief & rincian'}</button>
+                {#if t.status === 'terjadwal'}<button class="underline" onclick={() => statusTransaksi(t, 'berjalan')}>Mulai</button>{/if}
+                {#if t.status === 'berjalan'}<button class="underline" onclick={() => statusTransaksi(t, 'selesai')}>Selesai</button>{/if}
+                {#if t.status !== 'batal' && t.status !== 'selesai'}<button class="underline" onclick={() => statusTransaksi(t, 'batal')}>Batal</button>{/if}
+                {#if openTransaksiId === t.id}
+                  <button class="underline" onclick={() => printBrief(t)}>Cetak brief</button>
+                  <button class="underline" onclick={() => waBrief(t)}>WA brief</button>
+                {/if}
+              </div>
+              {#if openTransaksiId === t.id}
+                <ul class="mt-3 grid gap-1 border-t border-ash pt-3 text-body-sm">
+                  {#each t.baris as b (b.id)}
+                    <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)}</span></li>
+                  {/each}
+                </ul>
+                <form class="mt-4 grid gap-3 border-t border-ash pt-3 max-md:grid-cols-1 md:grid-cols-2" onsubmit={(e) => simpanBrief(t, e)}>
+                  <p class="text-body-sm font-normal md:col-span-2">Brief project</p>
+                  {#each [['objective', 'Objective'], ['audience', 'Audience'], ['style', 'Style'], ['mood', 'Mood'], ['lokasi', 'Lokasi'], ['talent', 'Talent'], ['deliverables', 'Deliverables'], ['deadline', 'Deadline (YYYY-MM-DD)'], ['notes', 'Notes']] as [f, label] (f)}
+                    <label class="grid gap-1 text-body-sm">{label}<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={brForm[f]} /></label>
+                  {/each}
+                  <label class="grid gap-1 text-body-sm">DO<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={brForm.dos} /></label>
+                  <label class="grid gap-1 text-body-sm">DON'T<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={brForm.donts} /></label>
+                  <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white justify-self-start md:col-span-2" type="submit">Simpan brief</button>
+                </form>
               {/if}
             </li>
           {/each}
