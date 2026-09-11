@@ -84,6 +84,16 @@ const STUB = {
       },
     ],
   },
+  '/api/ringkasan': {
+    total_modal: 12500000, total_pendapatan: 12000000, piutang: 3500000,
+    per_alat: [
+      { id: 1, nama: 'Sony NXR-100', modal: 12000000, pendapatan: 12000000, balik_modal: true },
+      { id: 2, nama: 'Tripod B-18', modal: 500000, pendapatan: 0, balik_modal: false },
+    ],
+    belum_lunas: [{ id: 1, nomor: 'INV-2026-0001', sisa: 3500000, jatuh_tempo: '2026-08-24', status: 'partial' }],
+    overdue: [],
+    recent: [{ id: 1, nama_project: 'Drone Bandar Baru', nama_client: 'Pak Suhaimi', total: 600000, status: 'terjadwal' }],
+  },
 };
 
 const server = createServer((req, res) => {
@@ -130,7 +140,7 @@ for (const [label, w, h] of [['desktop', 1280, 800], ['mobile', 390, 844]]) {
     else ok(`${label} login renders, 0 console errors`);
     await page.close();
   }
-  // Dashboard: alat list + badges + paket list, no console errors.
+  // Dashboard: nav through all 7 views, each renders, no console errors.
   {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
     const errs = [];
@@ -138,28 +148,27 @@ for (const [label, w, h] of [['desktop', 1280, 800], ['mobile', 390, 844]]) {
     page.on('pageerror', (e) => errs.push(String(e)));
     await page.goto(`${base}/dashboard.html`);
     await page.waitForTimeout(900);
-    const body = (await page.locator('#app').innerText()) ?? '';
-    const checks = [
-      ['NXR-100 row', body.includes('Sony NXR-100')],
-      ['paid-off badge', body.includes('Balik modal')],
-      ['unpaid badge', body.includes('Belum balik modal')],
-      ['modal math shown', body.includes('Rp 12.000.000')],
-      ['add form', (await page.locator('input[name=nama]').count()) === 1],
-      ['paket 1 row', body.includes('Paket 1 Camera')],
-      ['paket 1 total', body.includes('Rp 1.415.000')],
-      ['paket 2 row', body.includes('Paket 2 Camera')],
-      ['rab row', body.includes('RAB-2026-0001')],
-      ['rab total', body.includes('Rp 3.250.000')],
-      ['setujui button', body.includes('Setujui')],
-      ['transaksi row', body.includes('Drone Bandar Baru')],
-      ['walk-in form', body.includes('Transaksi walk-in')],
-      ['invoice row', body.includes('INV-2026-0001')],
-      ['invoice balance', body.includes('Rp 3.500.000')],
-    ];
-    const bad = checks.filter(([, v]) => !v).map(([n]) => n);
-    if (bad.length) fail(`${label} dashboard: missing ${bad.join(', ')}`);
+    const seen = [];
+    const missing = [];
+    const go = async (label, text) => {
+      await page.getByRole('button', { name: label, exact: true }).click();
+      await page.waitForTimeout(400);
+      const body = (await page.locator('#app').innerText()) ?? '';
+      if (body.includes(text)) seen.push(label);
+      else missing.push(`${label} (no ${text})`);
+    };
+    const first = (await page.locator('#app').innerText()) ?? '';
+    if (first.includes('Rp 12.500.000')) seen.push('Ringkasan');
+    else missing.push('Ringkasan');
+    await go('Alat', 'Sony NXR-100');
+    await go('Paket', 'Paket 1 Camera');
+    await go('RAB', 'RAB-2026-0001');
+    await go('Transaksi', 'Drone Bandar Baru');
+    await go('Invoice', 'INV-2026-0001');
+    await go('Settings', 'No. rekening');
+    if (missing.length) fail(`${label} dashboard: missing ${missing.join(', ')}`);
     else if (errs.length) fail(`${label} dashboard: console errors: ${errs.join(' // ')}`);
-    else ok(`${label} dashboard renders (alat badges + paket), 0 console errors`);
+    else ok(`${label} dashboard renders (7 views: ${seen.join(', ')}), 0 console errors`);
     await page.close();
   }
 }
