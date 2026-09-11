@@ -31,6 +31,8 @@ const STUB = {
   '/api/invoice': {
     invoice: [
       { id: 1, transaksi_id: 1, nomor: 'INV-2026-0001', tanggal_terbit: '2026-08-17', jatuh_tempo: '2026-08-24', total: 5500000, bank_snapshot: 'BCA 8335463109 Luthfi Ahmad Zaidan', status: 'partial', dibayar: 2000000, sisa: 3500000, overdue: false },
+      // Overdue: cabang badge merah + chip merah 'overdue' (Q29).
+      { id: 2, transaksi_id: 2, nomor: 'INV-2026-0002', tanggal_terbit: '2026-08-01', jatuh_tempo: '2026-08-07', total: 900000, bank_snapshot: 'BCA 8335463109 Luthfi Ahmad Zaidan', status: 'unpaid', dibayar: 0, sisa: 900000, overdue: true },
     ],
   },
   '/api/transaksi': {
@@ -140,35 +142,92 @@ for (const [label, w, h] of [['desktop', 1280, 800], ['mobile', 390, 844]]) {
     else ok(`${label} login renders, 0 console errors`);
     await page.close();
   }
-  // Dashboard: nav through all 7 views, each renders, no console errors.
+  // Dashboard: sidebar shell + hash nav + drawer, all views render.
   {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
     const errs = [];
     page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
     page.on('pageerror', (e) => errs.push(String(e)));
-    await page.goto(`${base}/dashboard.html`);
+    const isDesktop = w >= 768;
+    // Deep link: hash #/invoice lands on the Invoice view (Q35).
+    await page.goto(`${base}/dashboard.html#/invoice`);
     await page.waitForTimeout(900);
-    const seen = [];
-    const missing = [];
-    const go = async (label, text) => {
-      await page.getByRole('button', { name: label, exact: true }).click();
-      await page.waitForTimeout(400);
-      const body = (await page.locator('#app').innerText()) ?? '';
-      if (body.includes(text)) seen.push(label);
-      else missing.push(`${label} (no ${text})`);
+    const sidebar = page.locator('[data-sidebar]');
+    // Sidebar visible on desktop, hidden behind drawer on mobile (ADR-0012).
+    if ((await sidebar.isVisible()) !== isDesktop)
+      fail(`${label} sidebar: visibility wrong (visible=${await sidebar.isVisible()}, desktop=${isDesktop})`);
+    const invBody = (await page.locator('#app').textContent()) ?? '';
+    if (!invBody.includes('INV-2026-0001') || !invBody.includes('Tempo 24 Agu 2026'))
+      fail(`${label} hash #/invoice: invoice view not shown`);
+    else ok(`${label} hash #/invoice lands on Invoice (tanggal Indonesia)`);
+
+    const go = async (navLabel, text) => {
+      // Non-exact: badge count ikut nama aksesibel tombol (e.g. "Transaksi 1").
+      if (isDesktop) await sidebar.getByRole('button', { name: navLabel }).click();
+      else {
+        await page.locator("button[aria-label='Buka menu']").click();
+        await page.waitForTimeout(250);
+        await page.locator('[data-drawer]').getByRole('button', { name: navLabel }).click();
+      }
+      await page.waitForTimeout(450);
+      const body = (await page.locator('#app').textContent()) ?? '';
+      if (!body.includes(text)) fail(`${label} view ${navLabel}: missing ${text}`);
     };
-    const first = (await page.locator('#app').innerText()) ?? '';
-    if (first.includes('Rp 12.500.000')) seen.push('Ringkasan');
-    else missing.push('Ringkasan');
+    await go('Ringkasan', 'Rp 12.500.000');
     await go('Alat', 'Sony NXR-100');
     await go('Paket', 'Paket 1 Camera');
     await go('RAB', 'RAB-2026-0001');
     await go('Transaksi', 'Drone Bandar Baru');
-    await go('Invoice', 'INV-2026-0001');
     await go('Settings', 'No. rekening');
-    if (missing.length) fail(`${label} dashboard: missing ${missing.join(', ')}`);
-    else if (errs.length) fail(`${label} dashboard: console errors: ${errs.join(' // ')}`);
-    else ok(`${label} dashboard renders (7 views: ${seen.join(', ')}), 0 console errors`);
+    await go('Invoice', 'INV-2026-0001');
+    // Browser back returns to the previous view via hash history (Q35).
+    await page.goBack();
+    await page.waitForTimeout(450);
+    if (page.url().split('#')[1] === '/settings') ok(`${label} browser back → #/settings`);
+    else fail(`${label} back: hash is ${page.url()}`);
+
+    if (isDesktop) {
+      // Badges (Q29): 2 invoice belum-lunas (merah, stub ada overdue),
+      // 1 transaksi aktif (navy). 0 = badge hilang.
+      const invBadge = sidebar.locator('[data-badge-invoice]');
+      if ((await invBadge.textContent()) !== '2' || !(await invBadge.getAttribute('class')).includes('bg-magenta-bloom'))
+        fail(`${label} invoice badge: expected red 2`);
+      const txBadge = sidebar.locator('[data-badge-transaksi]');
+      if ((await txBadge.textContent()) !== '1' || !(await txBadge.getAttribute('class')).includes('bg-navy-ink'))
+        fail(`${label} transaksi badge: expected navy 1`);
+      if (!(await sidebar.textContent()).includes('Keluar')) fail(`${label} sidebar: no user/Keluar at bottom`);
+    } else {
+      // Drawer sopan (Q36): Esc, klik-luar, back, pilih menu semuanya menutup.
+      const drawer = page.locator('[data-drawer]');
+      await page.locator("button[aria-label='Buka menu']").click();
+      await page.waitForTimeout(300);
+      if (!(await drawer.isVisible())) fail('mobile drawer: not open');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      if (await drawer.isVisible()) fail('mobile drawer: Esc did not close');
+      await page.locator("button[aria-label='Buka menu']").click();
+      await page.waitForTimeout(300);
+      // Tombol back browser juga menutup drawer (entri pushState terkonsumsi).
+      await page.goBack();
+      await page.waitForTimeout(300);
+      if (await drawer.isVisible()) fail('mobile drawer: back did not close');
+      else ok('mobile drawer: Esc/back close');
+      await page.locator("button[aria-label='Buka menu']").click();
+      await page.waitForTimeout(300);
+      // Klik di luar panel drawer (kanan dari panel 260px) menutup.
+      await page.locator("button[aria-label='Tutup menu']").click({ position: { x: 350, y: 400 } });
+      await page.waitForTimeout(300);
+      if (await drawer.isVisible()) fail('mobile drawer: outside-tap did not close');
+      await page.locator("button[aria-label='Buka menu']").click();
+      await page.waitForTimeout(300);
+      await drawer.getByRole('button', { name: 'Paket', exact: true }).click();
+      await page.waitForTimeout(450);
+      if (await drawer.isVisible()) fail('mobile drawer: select did not close');
+      if (page.url().split('#')[1] === '/paket') ok('mobile drawer: outside/select close, select lands on hash');
+      else fail(`mobile drawer: hash ${page.url()} after select`);
+    }
+    if (errs.length) fail(`${label} dashboard: console errors: ${errs.join(' // ')}`);
+    else ok(`${label} dashboard renders all 7 views, 0 console errors`);
     await page.close();
   }
 }
