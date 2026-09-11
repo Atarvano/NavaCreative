@@ -28,6 +28,11 @@ const MIME = {
 const STUB = {
   '/api/auth/me': { username: 'admin' },
   '/api/settings': { settings: { nama: 'Nava Production', hp: '085817999140', email: 'navaproduction9@gmail.com', bank: 'BCA', norek: '8335463109', atas_nama: 'Luthfi Ahmad Zaidan' } },
+  '/api/invoice': {
+    invoice: [
+      { id: 1, transaksi_id: 1, nomor: 'INV-2026-0001', tanggal_terbit: '2026-08-17', jatuh_tempo: '2026-08-24', total: 5500000, bank_snapshot: 'BCA 8335463109 Luthfi Ahmad Zaidan', status: 'partial', dibayar: 2000000, sisa: 3500000, overdue: false },
+    ],
+  },
   '/api/transaksi': {
     transaksi: [
       {
@@ -148,6 +153,8 @@ for (const [label, w, h] of [['desktop', 1280, 800], ['mobile', 390, 844]]) {
       ['setujui button', body.includes('Setujui')],
       ['transaksi row', body.includes('Drone Bandar Baru')],
       ['walk-in form', body.includes('Transaksi walk-in')],
+      ['invoice row', body.includes('INV-2026-0001')],
+      ['invoice balance', body.includes('Rp 3.500.000')],
     ];
     const bad = checks.filter(([, v]) => !v).map(([n]) => n);
     if (bad.length) fail(`${label} dashboard: missing ${bad.join(', ')}`);
