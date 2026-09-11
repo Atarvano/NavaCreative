@@ -92,6 +92,7 @@
       }
       me = (await meRes.json()).username;
       await load();
+      await bukaView('ringkasan');
     } catch {
       error = 'Tidak bisa menghubungi server.';
     }
@@ -497,6 +498,39 @@
     const b = brief ?? {};
     window.open('https://wa.me/?text=' + encodeURIComponent(`BRIEF ${t.nama_project}\n${b.objective ?? ''}\nLokasi: ${b.lokasi ?? ''}\nDeadline: ${b.deadline ?? ''}`), '_blank');
   }
+  // --- Shell #46: view nav + ringkasan + settings form ---
+  let view = $state('ringkasan');
+  let ringkasan = $state(null);
+  let setForm = $state({});
+  const VIEWS = [
+    ['ringkasan', 'Ringkasan'],
+    ['alat', 'Alat'],
+    ['paket', 'Paket'],
+    ['rab', 'RAB'],
+    ['transaksi', 'Transaksi'],
+    ['invoice', 'Invoice'],
+    ['settings', 'Settings'],
+  ];
+
+  async function bukaView(v) {
+    view = v;
+    if (v === 'ringkasan') {
+      const { res, data } = await api('/api/ringkasan');
+      if (res.ok) ringkasan = data;
+    }
+    if (v === 'settings') setForm = { ...settings };
+  }
+
+  async function simpanSettings(e) {
+    e.preventDefault();
+    error = '';
+    const { res, data } = await api('/api/settings', { method: 'PUT', body: JSON.stringify(setForm) });
+    if (!res.ok) error = data.error ?? 'Gagal menyimpan settings.';
+    else {
+      settings = data.settings;
+      notice = 'Settings tersimpan. Dokumen berikutnya pakai identitas baru.';
+    }
+  }
 </script>
 
 <main class="min-h-dvh bg-canvas px-(--pad) py-8">
@@ -504,17 +538,26 @@
     <header class="flex items-baseline justify-between gap-4">
       <div>
         <p class="text-subheading font-normal">Nava Creative</p>
-        <h1 class="mt-1 text-heading-sm font-light">Alat & modal</h1>
+        <h1 class="mt-1 text-heading-sm font-light">Dashboard</h1>
       </div>
       <div class="flex items-center gap-3 text-body-sm">
         {#if me}<span class="text-graphite">{me}</span>{/if}
         <button class="underline" onclick={logout}>Keluar</button>
       </div>
     </header>
+    <nav class="mt-6 flex flex-wrap gap-2" aria-label="Dashboard">
+      {#each VIEWS as [v, label] (v)}
+        <button
+          class="rounded-pill px-4 py-2 text-body-sm {view === v ? 'bg-navy-ink text-bone-white' : 'border border-ash'}"
+          aria-current={view === v ? 'page' : undefined}
+          onclick={() => bukaView(v)}>{label}</button>
+      {/each}
+    </nav>
 
     {#if error}<p role="alert" class="mt-4 text-body-sm text-magenta-bloom">{error}</p>{/if}
     {#if notice}<p role="status" class="mt-4 text-body-sm text-forest-teal">{notice}</p>{/if}
 
+    {#if view === 'alat'}
     <section class="mt-8">
       <h2 class="text-subheading font-normal">Tambah alat</h2>
       <form class="mt-4 grid gap-4 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end" onsubmit={addAlat}>
@@ -599,6 +642,8 @@
         </ul>
       {/if}
     </section>
+    {/if}
+    {#if view === 'paket'}
     <section class="mt-12">
       <h2 class="text-subheading font-normal">Paket live streaming</h2>
       {#if !paket.length}
@@ -639,6 +684,8 @@
         </ul>
       {/if}
     </section>
+    {/if}
+    {#if view === 'rab'}
     <section class="mt-12">
       <h2 class="text-subheading font-normal">RAB</h2>
       <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4" onsubmit={simpanRab}>
@@ -749,6 +796,8 @@
         </ul>
       {/if}
     </section>
+    {/if}
+    {#if view === 'transaksi'}
     <section class="mt-12">
       <h2 class="text-subheading font-normal">Transaksi walk-in</h2>
       <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4" onsubmit={simpanTransaksi}>
@@ -821,6 +870,8 @@
         </ul>
       {/if}
     </section>
+    {/if}
+    {#if view === 'invoice'}
     <section class="mt-12">
       <h2 class="text-subheading font-normal">Invoice</h2>
       {#if !invoices.length}
@@ -864,5 +915,62 @@
         </ul>
       {/if}
     </section>
+    {/if}
+    {#if view === 'ringkasan'}
+    <section class="mt-8">
+      <h2 class="text-subheading font-normal">Ringkasan</h2>
+      {#if !ringkasan}
+        <p class="mt-4 text-body-sm text-graphite">Memuat…</p>
+      {:else}
+        <div class="mt-4 grid gap-4 max-md:grid-cols-1 md:grid-cols-3">
+          <div class="border border-ash bg-bone-white p-4"><p class="text-caption text-graphite uppercase">Total modal</p><p class="text-subheading font-normal">{rupiah(ringkasan.total_modal)}</p></div>
+          <div class="border border-ash bg-bone-white p-4"><p class="text-caption text-graphite uppercase">Total pendapatan</p><p class="text-subheading font-normal">{rupiah(ringkasan.total_pendapatan)}</p></div>
+          <div class="border border-ash bg-bone-white p-4"><p class="text-caption text-graphite uppercase">Piutang</p><p class="text-subheading font-normal">{rupiah(ringkasan.piutang)}</p></div>
+        </div>
+        <h3 class="mt-8 text-body font-normal">Balik modal per alat</h3>
+        <ul class="mt-2 grid gap-2">
+          {#each ringkasan.per_alat as a (a.id)}
+            <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{a.nama}</span><span>{a.balik_modal ? 'Balik modal' : `${rupiah(a.pendapatan)} / ${rupiah(a.modal)}`}</span></li>
+          {/each}
+        </ul>
+        {#if ringkasan.belum_lunas.length}
+          <h3 class="mt-8 text-body font-normal">Belum lunas</h3>
+          <ul class="mt-2 grid gap-2">
+            {#each ringkasan.belum_lunas as b (b.id)}
+              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{b.nomor} · tempo {b.jatuh_tempo}</span><span>{rupiah(b.sisa)}</span></li>
+            {/each}
+          </ul>
+        {/if}
+        {#if ringkasan.overdue.length}
+          <h3 class="mt-8 text-body font-normal">Overdue</h3>
+          <ul class="mt-2 grid gap-2">
+            {#each ringkasan.overdue as b (b.id)}
+              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{b.nomor} · tempo {b.jatuh_tempo}</span><span>{rupiah(b.sisa)}</span></li>
+            {/each}
+          </ul>
+        {/if}
+        {#if ringkasan.recent.length}
+          <h3 class="mt-8 text-body font-normal">Transaksi terbaru</h3>
+          <ul class="mt-2 grid gap-2">
+            {#each ringkasan.recent as t (t.id)}
+              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{t.nama_project} · {t.nama_client}</span><span>{rupiah(t.total)}</span></li>
+            {/each}
+          </ul>
+        {/if}
+      {/if}
+    </section>
+    {/if}
+    {#if view === 'settings'}
+    <section class="mt-8">
+      <h2 class="text-subheading font-normal">Settings</h2>
+      <p class="mt-2 text-body-sm text-graphite">Identitas + rekening untuk kop dokumen. Logo file statis (ganti file + deploy).</p>
+      <form class="mt-4 grid gap-4 max-md:grid-cols-1 md:grid-cols-2" onsubmit={simpanSettings}>
+        {#each [['nama', 'Nama studio'], ['hp', 'No. HP'], ['email', 'Email'], ['bank', 'Bank'], ['norek', 'No. rekening'], ['atas_nama', 'Atas nama']] as [f, label] (f)}
+          <label class="grid gap-1 text-body-sm">{label}<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={setForm[f]} /></label>
+        {/each}
+        <button class="rounded-pill bg-navy-ink px-6 py-2 text-body-sm text-bone-white justify-self-start md:col-span-2" type="submit">Simpan settings</button>
+      </form>
+    </section>
+    {/if}
   </div>
 </main>
