@@ -56,6 +56,10 @@
       headers: { 'content-type': 'application/json', ...(opts.headers ?? {}) },
     });
     if (res.status === 401) {
+      // Q36: selamatkan draft builder sebelum pindah ke login.
+      const d = txDraft();
+      if (d.nama_project || d.nama_client || d.baris?.length) stashDraft('transaksi', d);
+      if (briefOpenId) stashDraft('brief', { transaksi_id: briefOpenId, form: brForm });
       location.href = 'login.html';
       throw new Error('unauthorized');
     }
@@ -92,6 +96,18 @@
       }
       me = (await meRes.json()).username;
       await load();
+      // Q36: draft terselamatkan saat 401 dibuka kembali + notice.
+      const drafTx = ambilDraft('transaksi');
+      if (draftAda(drafTx)) {
+        txMuatDraft(drafTx);
+        notice = 'Draft walk-in terselamatkan dari sesi sebelumnya.';
+      }
+      const drafBrief = ambilDraft('brief');
+      if (drafBrief) {
+        notice = draftAda(drafTx)
+          ? 'Draft walk-in + Brief terselamatkan — buka Rincian barisnya untuk lanjut Brief.'
+          : 'Draft Brief terselamatkan — buka Rincian barisnya untuk lanjut.';
+      }
       await tampilkan(viewDariHash() ?? 'ringkasan');
     } catch {
       error = 'Tidak bisa menghubungi server.';
@@ -315,6 +331,104 @@
   let brief = $state(null);
   let brForm = $state({});
 
+  // --- Redesign 02 (#55): tabel + walk-in di balik + + Brief lapis-dua ---
+  // Walk-in builder hidden behind + (Q13); one draft flag, not field diffing.
+  let walkinOpen = $state(false);
+  // Brief second layer opens inside the expand (Q18), one at a time.
+  let briefOpenId = $state(null);
+  // Table state (Q12/Q24): search + status filter + one sortable column.
+  // Filter tetap state sesi (Q35) — session vars, never in the URL.
+  let txSearch = $state('');
+  let txStatusFilter = $state('semua');
+  let txSortKey = $state(null); // null = id desc (default terbaru)
+  let txSortDesc = $state(true);
+
+  const TX_STATUSES = ['terjadwal', 'berjalan', 'selesai', 'batal'];
+
+  // Sort: satu kolom client-side (Q24) — Total; klik cycle desc→asc→terbaru.
+  const txFiltered = $derived(
+    (() => {
+      const q = txSearch.trim().toLowerCase();
+      let rows = transaksi.filter((t) => {
+        const okStatus = txStatusFilter === 'semua' || t.status === txStatusFilter;
+        const hay = [t.nama_project, t.nama_client, t.lokasi, t.perusahaan_client].filter(Boolean).join(' ').toLowerCase();
+        return okStatus && (!q || hay.includes(q));
+      });
+      if (txSortKey) {
+        const dir = txSortDesc ? -1 : 1;
+        rows = [...rows].sort((a, b) => (a[txSortKey] - b[txSortKey]) * dir);
+      }
+      return rows;
+    })(),
+  );
+
+  function txUrutkan(key) {
+    if (txSortKey === key) {
+      if (!txSortDesc) txSortKey = null; // klik ketiga: kembali ke terbaru
+      else txSortDesc = false;
+    } else {
+      txSortKey = key;
+      txSortDesc = true;
+    }
+  }
+
+  // Baris dikelompokkan per kategori + subtotal, plek dokumen (Q32).
+  const txGrup = (t) => {
+    const by = new Map();
+    for (const b of t.baris ?? []) {
+      const g = b.kategori || 'PRODUCTION';
+      if (!by.has(g)) by.set(g, []);
+      by.get(g).push(b);
+    }
+    return [...by.entries()].map(([kategori, baris]) => ({
+      kategori,
+      baris,
+      subtotal: baris.reduce((s, b) => s + b.qty * b.harga_satuan, 0),
+    }));
+  };
+
+  // 401 mid-draft (Q36): stash ke localStorage sebelum redirect ke login,
+  // restore + notice setelah login. Key per builder.
+  function stashDraft(key, value) {
+    try {
+      localStorage.setItem('nava-draft-' + key, JSON.stringify(value));
+    } catch {}
+  }
+  function ambilDraft(key) {
+    try {
+      const raw = localStorage.getItem('nava-draft-' + key);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+  function hapusDraft(key) {
+    try {
+      localStorage.removeItem('nava-draft-' + key);
+    } catch {}
+  }
+  const txDraft = () => ({
+    nama_project: txProject, nama_client: txClient,
+    tanggal_mulai: txMulai, tanggal_selesai: txSelesai, lokasi: txLokasi, baris: txBaris,
+  });
+  const txMuatDraft = (d) => {
+    txProject = d.nama_project ?? '';
+    txClient = d.nama_client ?? '';
+    txMulai = d.tanggal_mulai ?? '';
+    txSelesai = d.tanggal_selesai ?? '';
+    txLokasi = d.lokasi ?? '';
+    txBaris = d.baris ?? [];
+  };
+  const draftAda = (d) => !!(d && (d.nama_project || d.nama_client || d.baris?.length));
+
+  function bukaWalkin() {
+    walkinOpen = !walkinOpen;
+    if (walkinOpen && draftAda(ambilDraft('transaksi'))) {
+      txMuatDraft(ambilDraft('transaksi'));
+      notice = 'Draft walk-in sebelumnya dibuka kembali.';
+    }
+  }
+
   function txTambahBaris(e) {
     e.preventDefault();
     txBaris = [...txBaris, { kategori: 'PRODUCTION', jenis: txJenis, alat_id: null, nama: txNama.trim(), qty: Number(txQty) || 1, satuan: txSatuan, harga_satuan: Number(txHarga) || 0 }];
@@ -324,32 +438,45 @@
     txHarga = '';
   }
 
+  // Brief lapis-dua (Q18): buka di dalam expand; draft 401 dibuka kembali
+  // bila masih cocok dengan transaksi yang sama.
+  function bukaBrief(t) {
+    briefOpenId = briefOpenId === t.id ? null : t.id;
+    const draf = ambilDraft('brief');
+    if (briefOpenId === t.id && draf && draf.transaksi_id === t.id) {
+      brForm = draf.form;
+      notice = 'Draft Brief sebelumnya dibuka kembali.';
+    }
+  }
+
   async function simpanTransaksi(e) {
     e.preventDefault();
     error = '';
     notice = '';
-    const { res, data } = await api('/api/transaksi', {
-      method: 'POST',
-      body: JSON.stringify({
-        nama_project: txProject, nama_client: txClient,
-        tanggal_mulai: txMulai || undefined, tanggal_selesai: txSelesai || undefined,
-        lokasi: txLokasi, baris: txBaris,
-      }),
-    });
-    if (!res.ok) {
-      error = data.error ?? 'Gagal menyimpan transaksi.';
-      return;
+    busy = true;
+    try {
+      const { res, data } = await api('/api/transaksi', {
+        method: 'POST',
+        body: JSON.stringify({
+          nama_project: txProject, nama_client: txClient,
+          tanggal_mulai: txMulai || undefined, tanggal_selesai: txSelesai || undefined,
+          lokasi: txLokasi, baris: txBaris,
+        }),
+      });
+      if (!res.ok) {
+        error = data.error ?? 'Gagal menyimpan transaksi.';
+        return;
+      }
+      notice = data.bentrok?.length
+        ? `Tersimpan — bentrok dengan ${data.bentrok.map((b) => b.nama_project).join(', ')}.`
+        : 'Transaksi walk-in tersimpan.';
+      hapusDraft('transaksi');
+      txMuatDraft({});
+      walkinOpen = false;
+      await load();
+    } finally {
+      busy = false;
     }
-    notice = data.bentrok?.length
-      ? `Tersimpan — bentrok dengan ${data.bentrok.map((b) => b.nama_project).join(', ')}.`
-      : 'Transaksi walk-in tersimpan.';
-    txProject = '';
-    txClient = '';
-    txMulai = '';
-    txSelesai = '';
-    txLokasi = '';
-    txBaris = [];
-    await load();
   }
 
   async function statusTransaksi(t, status) {
@@ -368,19 +495,28 @@
   let byTanggal = $state(new Date().toISOString().slice(0, 10));
   let byJumlah = $state('');
   let byMetode = $state('transfer');
-  let jatuhTempo = $state('');
 
+  // Terbitkan = primer sekali-klik (Q45: tanpa confirm — void + koreksi
+  // minus tetap pengaman), tempo default H+7, auto-pindah #/invoice + notice.
+  // H+7 dihitung tanggal LOKAL, bukan UTC (toISOString bisa geser sehari
+  // kalau diterbitkan pagi buta WIB).
+  const hariIniPlus = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    const p = (x) => String(x).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
   async function terbitkan(t) {
-    const jt = jatuhTempo || new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+    const jt = hariIniPlus(7);
     const { res, data } = await api(`/api/transaksi/${t.id}/invoice`, {
       method: 'POST',
       body: JSON.stringify({ jatuh_tempo: jt }),
     });
     if (!res.ok) error = data.error ?? 'Gagal menerbitkan invoice.';
     else {
-      notice = `${data.nomor} terbit. Baris transaksi dikunci.`;
-      jatuhTempo = '';
+      notice = `${data.nomor} terbit (tempo ${tgl(data.jatuh_tempo)}). Baris transaksi dikunci.`;
       await load();
+      go('invoice');
     }
   }
 
@@ -444,7 +580,9 @@
   }
 
   async function bukaTransaksi(t) {
+    // Expand seragam (Q25): single-open per view; lapis-dua Brief ikut ketutup.
     openTransaksiId = openTransaksiId === t.id ? null : t.id;
+    briefOpenId = null;
     brief = null;
     if (openTransaksiId) {
       const { res, data } = await api(`/api/transaksi/${t.id}/brief`);
@@ -462,6 +600,7 @@
     else {
       brief = data.brief;
       notice = `Brief ${t.nama_project} tersimpan.`;
+      hapusDraft('brief');
     }
   }
 
@@ -495,6 +634,11 @@
   async function tampilkan(v) {
     if (!VIEW_KEYS.includes(v)) v = 'ringkasan';
     view = v;
+    // Q25: expand reset saat pindah view (lompat Ringkasan #58 = pengecualian).
+    if (v !== 'transaksi') {
+      openTransaksiId = null;
+      briefOpenId = null;
+    }
     if (v === 'ringkasan') {
       const { res, data } = await api('/api/ringkasan');
       if (res.ok) ringkasan = data;
@@ -586,6 +730,66 @@
     }
   }
 </script>
+
+{#snippet txRow(t)}
+  <tr class="border-b border-ash align-top scroll-mt-24 {openTransaksiId === t.id ? 'bg-canvas' : ''}">
+    <td class="px-3 py-3">
+      <p class="text-body font-normal">{t.nama_project}</p>
+      {#if t.lokasi}<p class="text-caption text-graphite">{t.lokasi}</p>{/if}
+    </td>
+    <td class="px-3 py-3">
+      {t.nama_client}
+      {#if t.perusahaan_client}<p class="text-caption text-graphite">{t.perusahaan_client}</p>{/if}
+    </td>
+    <td class="px-3 py-3">{t.tanggal_mulai ? `${tgl(t.tanggal_mulai)}${t.tanggal_selesai && t.tanggal_selesai !== t.tanggal_mulai ? ` – ${tgl(t.tanggal_selesai)}` : ''}` : '—'}</td>
+    <td class="px-3 py-3 text-right">{rupiah(t.total)}</td>
+    <td class="px-3 py-3"><span class="rounded-pill px-3 py-1 text-caption {chipCls(t.status)}">{t.status}</span></td>
+    <td class="px-3 py-3">
+      <div class="flex flex-wrap justify-end gap-3">
+        {#if t.status === 'terjadwal'}
+          <button class="underline scroll-mt-32" onclick={() => statusTransaksi(t, 'berjalan')}>Mulai</button>
+        {:else if t.status === 'berjalan'}
+          <button class="underline scroll-mt-32" onclick={() => statusTransaksi(t, 'selesai')}>Selesai</button>
+        {:else if t.status === 'selesai' && !t.invoice_terbit}
+          <button class="underline scroll-mt-32" onclick={() => terbitkan(t)}>Terbitkan</button>
+        {/if}
+        <button class="underline scroll-mt-32" onclick={() => bukaTransaksi(t)}>{openTransaksiId === t.id ? 'Tutup' : 'Rincian'}</button>
+      </div>
+    </td>
+  </tr>
+  {#if openTransaksiId === t.id}
+  <tr class="bg-canvas"><td colspan="6" class="px-3 py-4">
+    <div class="grid gap-2">
+      {#each txGrup(t) as g (g.kategori)}
+        <p class="text-caption uppercase text-graphite">{g.kategori} — subtotal {rupiah(g.subtotal)}</p>
+        <ul class="grid gap-1 text-body-sm">
+          {#each g.baris as b (b.id)}
+            <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)}</span></li>
+          {/each}
+        </ul>
+      {/each}
+      {#if !txGrup(t).length}<p class="text-body-sm text-graphite">Tanpa baris.</p>{/if}
+    </div>
+    <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
+      <button class="underline" onclick={() => bukaBrief(t)} data-brief-toggle>{briefOpenId === t.id ? 'Tutup Brief' : 'Brief'}</button>
+      <button class="underline" onclick={() => printBrief(t)}>Cetak brief</button>
+      {#if !t.invoice_terbit && t.status !== 'selesai' && t.status !== 'batal'}<button class="underline" onclick={() => terbitkan(t)}>Terbitkan invoice</button>{/if}
+      {#if t.status !== 'batal' && t.status !== 'selesai'}<button class="underline" onclick={() => statusTransaksi(t, 'batal')}>Batal</button>{/if}
+    </div>
+    {#if briefOpenId === t.id}
+      <form class="mt-4 grid gap-3 border-t border-ash pt-4 max-md:grid-cols-1 md:grid-cols-2" onsubmit={(e) => simpanBrief(t, e)} data-brief-form>
+        <p class="text-body font-normal md:col-span-2">Brief project — {t.nama_project}</p>
+        {#each [['objective', 'Objective'], ['audience', 'Audience'], ['style', 'Style'], ['mood', 'Mood'], ['lokasi', 'Lokasi'], ['talent', 'Talent'], ['deliverables', 'Deliverables'], ['deadline', 'Deadline'], ['notes', 'Notes']] as [f, label] (f)}
+          <label class="grid gap-1 text-body-sm">{label}<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type={f === 'deadline' ? 'date' : 'text'} bind:value={brForm[f]} /></label>
+        {/each}
+        <label class="grid gap-1 text-body-sm">DO<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={brForm.dos} /></label>
+        <label class="grid gap-1 text-body-sm">DON'T<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={brForm.donts} /></label>
+        <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white md:col-span-2 md:justify-self-start max-md:w-full" type="submit">Simpan brief</button>
+      </form>
+    {/if}
+  </td></tr>
+  {/if}
+{/snippet}
 
 {#snippet navItem(v, label)}
   <button
@@ -898,15 +1102,22 @@
     </section>
     {/if}
     {#if view === 'transaksi'}
-    <section class="mt-12">
-      <h2 class="text-subheading font-normal">Transaksi walk-in</h2>
-      <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4" onsubmit={simpanTransaksi}>
+    <section class="mt-8" data-view="transaksi">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-subheading font-normal">Transaksi</h2>
+        <button class="rounded-pill bg-navy-ink px-5 py-3 text-body-sm text-bone-white" onclick={bukaWalkin} data-walkin-toggle>
+          {walkinOpen ? 'Tutup' : '+ Walk-in'}
+        </button>
+      </div>
+
+      {#if walkinOpen}
+      <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4" onsubmit={simpanTransaksi} data-walkin-form>
         <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
-          <label class="grid gap-1 text-body-sm">Nama project<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" required bind:value={txProject} placeholder="Drone Bandar Baru" /></label>
-          <label class="grid gap-1 text-body-sm">Nama client<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" required bind:value={txClient} placeholder="Pak Suhaimi" /></label>
-          <label class="grid gap-1 text-body-sm">Tanggal mulai<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" bind:value={txMulai} /></label>
-          <label class="grid gap-1 text-body-sm">Tanggal selesai<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" bind:value={txSelesai} /></label>
-          <label class="grid gap-1 text-body-sm md:col-span-2">Lokasi<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={txLokasi} placeholder="Bandar Baru" /></label>
+          <label class="grid gap-1 text-body-sm">Nama project<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" required bind:value={txProject} placeholder="Drone Bandar Baru" /></label>
+          <label class="grid gap-1 text-body-sm">Nama client<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" required bind:value={txClient} placeholder="Pak Suhaimi" /></label>
+          <label class="grid gap-1 text-body-sm">Tanggal mulai<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="date" bind:value={txMulai} /></label>
+          <label class="grid gap-1 text-body-sm">Tanggal selesai<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="date" bind:value={txSelesai} /></label>
+          <label class="grid gap-1 text-body-sm md:col-span-2">Lokasi<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={txLokasi} placeholder="Bandar Baru" /></label>
         </div>
         {#if txBaris.length}
           <ul class="grid gap-1 text-body-sm">
@@ -914,59 +1125,57 @@
               <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} <span class="text-graphite">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)} <button type="button" class="underline" onclick={() => (txBaris = txBaris.filter((_, j) => j !== i))}>hapus</button></span></li>
             {/each}
           </ul>
+        {:else}
+          <p class="text-body-sm text-graphite">Belum ada baris — tambah item di bawah.</p>
         {/if}
         <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] md:items-end">
-          <label class="grid gap-1 text-body-sm">Item<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={txNama} placeholder="Jasa Drone" /></label>
-          <label class="grid gap-1 text-body-sm">Jenis<select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={txJenis}><option value="jasa">jasa</option><option value="alat">alat</option><option value="biaya">biaya</option></select></label>
-          <label class="grid gap-1 text-body-sm">Qty<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" min="1" bind:value={txQty} /></label>
-          <label class="grid gap-1 text-body-sm">Harga (Rp)<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" min="0" bind:value={txHarga} /></label>
-          <button type="button" class="rounded-pill border border-ash px-5 py-2 text-body-sm" onclick={txTambahBaris}>+ Baris</button>
+          <label class="grid gap-1 text-body-sm">Item<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={txNama} placeholder="Jasa Drone" /></label>
+          <label class="grid gap-1 text-body-sm">Jenis<select class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={txJenis}><option value="jasa">jasa</option><option value="alat">alat</option><option value="biaya">biaya</option></select></label>
+          <label class="grid gap-1 text-body-sm">Qty<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="1" bind:value={txQty} /></label>
+          <label class="grid gap-1 text-body-sm">Harga (Rp)<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="0" bind:value={txHarga} /></label>
+          <button type="button" class="rounded-pill border border-ash px-5 py-3 text-body-sm max-md:w-full" onclick={txTambahBaris}>+ Baris</button>
         </div>
-        <button class="rounded-pill bg-navy-ink px-6 py-2 text-body-sm text-bone-white justify-self-start" type="submit">Simpan transaksi</button>
+        <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white disabled:opacity-50 md:justify-self-start max-md:w-full" type="submit" disabled={busy}>{busy ? '…' : 'Simpan transaksi'}</button>
       </form>
-    </section>
-    <section class="mt-12">
-      <h2 class="text-subheading font-normal">Transaksi</h2>
+      {/if}
+
       {#if !transaksi.length}
-        <p class="mt-4 text-body-sm text-graphite">Belum ada transaksi.</p>
+        <p class="mt-4 text-body-sm text-graphite">Belum ada transaksi. Mulai lewat tombol “+ Walk-in” di atas.</p>
       {:else}
-        <ul class="mt-4 grid gap-4">
-          {#each transaksi as t (t.id)}
-            <li class="border border-ash bg-bone-white p-4">
-              <div class="flex flex-wrap items-baseline justify-between gap-2">
-                <p class="text-body font-normal">{t.nama_project}</p>
-                <span class="rounded-pill px-3 py-1 text-caption {chipCls(t.status)}">{t.status}</span>
-              </div>
-              <p class="mt-1 text-body-sm text-graphite">{t.nama_client}{t.tanggal_mulai ? ` · ${tgl(t.tanggal_mulai)}` : ''} · {rupiah(t.total)}</p>
-              <div class="mt-2 flex flex-wrap gap-4 text-body-sm">
-                <button class="underline" onclick={() => bukaTransaksi(t)}>{openTransaksiId === t.id ? 'Tutup' : 'Brief & rincian'}</button>
-                {#if t.status === 'terjadwal'}<button class="underline" onclick={() => statusTransaksi(t, 'berjalan')}>Mulai</button>{/if}
-                {#if t.status === 'berjalan'}<button class="underline" onclick={() => statusTransaksi(t, 'selesai')}>Selesai</button>{/if}
-                {#if t.status !== 'batal' && t.status !== 'selesai'}<button class="underline" onclick={() => statusTransaksi(t, 'batal')}>Batal</button>{/if}
-                {#if !t.invoice_terbit}<button class="underline" onclick={() => terbitkan(t)}>Terbitkan invoice</button>{/if}
-                {#if openTransaksiId === t.id}
-                  <button class="underline" onclick={() => printBrief(t)}>Cetak brief</button>
-                {/if}
-              </div>
-              {#if openTransaksiId === t.id}
-                <ul class="mt-3 grid gap-1 border-t border-ash pt-3 text-body-sm">
-                  {#each t.baris as b (b.id)}
-                    <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)}</span></li>
-                  {/each}
-                </ul>
-                <form class="mt-4 grid gap-3 border-t border-ash pt-3 max-md:grid-cols-1 md:grid-cols-2" onsubmit={(e) => simpanBrief(t, e)}>
-                  <p class="text-body-sm font-normal md:col-span-2">Brief project</p>
-                  {#each [['objective', 'Objective'], ['audience', 'Audience'], ['style', 'Style'], ['mood', 'Mood'], ['lokasi', 'Lokasi'], ['talent', 'Talent'], ['deliverables', 'Deliverables'], ['deadline', 'Deadline (YYYY-MM-DD)'], ['notes', 'Notes']] as [f, label] (f)}
-                    <label class="grid gap-1 text-body-sm">{label}<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={brForm[f]} /></label>
-                  {/each}
-                  <label class="grid gap-1 text-body-sm">DO<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={brForm.dos} /></label>
-                  <label class="grid gap-1 text-body-sm">DON'T<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={brForm.donts} /></label>
-                  <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white justify-self-start md:col-span-2" type="submit">Simpan brief</button>
-                </form>
-              {/if}
-            </li>
-          {/each}
-        </ul>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <input class="min-w-40 flex-1 rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" placeholder="Cari project / client / lokasi" bind:value={txSearch} data-tx-search />
+        <select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={txStatusFilter} data-tx-status>
+          <option value="semua">semua status</option>
+          {#each TX_STATUSES as s (s)}<option value={s}>{s}</option>{/each}
+        </select>
+      </div>
+
+      {#if !txFiltered.length}
+        <p class="mt-4 text-body-sm text-graphite">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { txSearch = ''; txStatusFilter = 'semua'; }}>Reset</button></p>
+      {:else}
+      <div class="mt-4 overflow-x-auto">
+        <!-- Wrapper overflow-x jadi scroll container juga di sumbu blok, jadi
+             thead sticky hanya mengikat dari md ke atas (mobile: header ikut
+             scroll bareng tabel — tabelnya pendek + toolbar tetap kelihatan). -->
+        <table class="w-full min-w-[640px] border-collapse text-body-sm">
+          <thead class="bg-bone-white md:sticky md:top-0">
+            <tr class="border-b border-ash text-left">
+              <th class="px-3 py-2 font-normal">Project</th>
+              <th class="px-3 py-2 font-normal">Client</th>
+              <th class="px-3 py-2 font-normal">Tgl event</th>
+              <th class="px-3 py-2 text-right font-normal"><button class="underline {txSortKey === 'total' ? 'font-medium' : ''}" onclick={() => txUrutkan('total')}>Total {txSortKey === 'total' ? (txSortDesc ? '↓' : '↑') : ''}</button></th>
+              <th class="px-3 py-2 font-normal">Status</th>
+              <th class="px-3 py-2 text-right font-normal">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each txFiltered as t (t.id)}
+              {@render txRow(t)}
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      {/if}
       {/if}
     </section>
     {/if}
