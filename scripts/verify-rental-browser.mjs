@@ -257,6 +257,56 @@ const STUB = {
   },
   "/api/rab": {
     rab: [
+      // API asli `ORDER BY id DESC` — terbaru (approved) di atas. Tiga status
+      // menutup cabang aksi primer: draft→Kirim, sent→Setujui, approved→kunci.
+      {
+        id: 3,
+        nomor: "RAB-2026-0003",
+        nama_project: "Grand Opening Kafe",
+        tanggal_rab: "2026-08-10",
+        nama_client: "Kopi Sana",
+        perusahaan_client: "PT Kopi",
+        status: "approved",
+        diskon: 0,
+        total: 1500000,
+        catatan: "",
+        subtotal: { PRODUCTION: 1500000 },
+        baris: [
+          {
+            id: 5,
+            kategori: "PRODUCTION",
+            jenis: "jasa",
+            nama: "Dokumentasi Opening",
+            qty: 1,
+            satuan: "Sesi",
+            harga_satuan: 1500000,
+          },
+        ],
+      },
+      {
+        id: 2,
+        nomor: "RAB-2026-0002",
+        nama_project: "Akad Nikah Rina",
+        tanggal_rab: "2026-08-05",
+        nama_client: "Rina",
+        perusahaan_client: "",
+        status: "draft",
+        diskon: 0,
+        total: 600000,
+        catatan: "",
+        subtotal: { PRODUCTION: 600000 },
+        baris: [
+          {
+            id: 4,
+            kategori: "PRODUCTION",
+            jenis: "jasa",
+            nama: "Foto Akad",
+            qty: 1,
+            satuan: "Sesi",
+            harga_satuan: 600000,
+          },
+        ],
+      },
       {
         id: 1,
         nomor: "RAB-2026-0001",
@@ -291,6 +341,44 @@ const STUB = {
         ],
       },
     ],
+  },
+  // Buat RAB dari Paket (Q19): baris disalin ke builder di #/rab.
+  "/api/paket/1/ke-rab": {
+    nama_project: "Paket 1 Camera",
+    baris: [
+      {
+        kategori: "PRODUCTION",
+        jenis: "alat",
+        alat_id: null,
+        nama: "SONY FDR AX-40",
+        qty: 1,
+        satuan: "Unit",
+        harga_satuan: 100000,
+      },
+      {
+        kategori: "PRODUCTION",
+        jenis: "jasa",
+        alat_id: null,
+        nama: "OPERATOR",
+        qty: 2,
+        satuan: "Orang",
+        harga_satuan: 250000,
+      },
+    ],
+  },
+  // Setujui sekali-klik (Q45): RAB sent → Transaksi, auto-pindah #/transaksi.
+  "/api/rab/1/setujui": {
+    transaksi_id: 9,
+    transaksi: {
+      id: 9,
+      rab_id: 1,
+      nama_project: "Nikahan Soleh",
+      nama_client: "Soleh Permana",
+      perusahaan_client: "",
+      status: "terjadwal",
+      diskon: 50000,
+      total: 3250000,
+    },
   },
   "/api/ringkasan": {
     total_modal: 12500000,
@@ -576,6 +664,137 @@ for (const [label, w, h] of [
     else if (banner.includes("INV-2026-0003"))
       ok(`${label} terbitkan 1-klik → #/invoice + notice`);
     else fail(`${label} terbitkan: notice missing (${banner})`);
+
+    // --- Tabel RAB (redesign 03, #56) ---
+    // Navigasi langsung (desktop: sidebar; mobile: drawer) — go() hanya
+    // memverifikasi, tak mengembalikan hash.
+    const navRab = async (navLabel, text) => {
+      if (isDesktop)
+        await sidebar.getByRole("button", { name: navLabel }).click();
+      else {
+        await page.locator("button[aria-label='Buka menu']").click();
+        await page.waitForTimeout(250);
+        await page
+          .locator("[data-drawer]")
+          .getByRole("button", { name: navLabel })
+          .click();
+      }
+      await page.waitForTimeout(450);
+      const body = (await page.locator("#app").textContent()) ?? "";
+      if (!body.includes(text)) fail(`${label} view ${navLabel}: missing ${text}`);
+    };
+    await navRab("RAB", "RAB-2026-0001");
+    const rabTable = page.locator('[data-view="rab"]');
+    // Judul-kiri + tombol-kanan (Q5): tombol + RAB baru di header.
+    if (!(await rabTable.locator("[data-rab-toggle]").isVisible()))
+      fail(`${label} rab: no + RAB baru header button`);
+    // 3 baris stub; default urutan API id DESC → terbaru (approved) di atas.
+    if ((await rabTable.locator("table tbody tr").count()) !== 3)
+      fail(`${label} rab table: expected 3 rows`);
+    const rabFirst = await rabTable.locator("table tbody tr").first().textContent();
+    if (!(rabFirst ?? "").includes("Grand Opening Kafe"))
+      fail(`${label} rab table: default order not newest-first`);
+    // Aksi primer per status: draft→Kirim, sent→Setujui, approved→kunci (tanpa aksi).
+    const rabBodyTxt = (await rabTable.textContent()) ?? "";
+    if (!rabBodyTxt.includes("Kirim") || !rabBodyTxt.includes("Setujui"))
+      fail(`${label} rab row: missing primary action (Kirim/Setujui)`);
+    else ok(`${label} rab table newest-first + aksi primer per status`);
+    // Search: filter by client mempersempit ke 1 baris.
+    await rabTable.locator("[data-rab-search]").fill("Soleh");
+    await page.waitForTimeout(300);
+    let rrows = await rabTable.locator("table tbody tr").count();
+    if (rrows === 1) ok(`${label} rab search narrows to 1 row`);
+    else fail(`${label} rab search: expected 1, got ${rrows}`);
+    // Filter-miss empty state tawarkan reset (Q31).
+    await rabTable.locator("[data-rab-search]").fill("zzz");
+    await page.waitForTimeout(300);
+    if (!((await rabTable.textContent()) ?? "").includes("Reset"))
+      fail(`${label} rab filter-miss: no reset CTA`);
+    await rabTable.locator("[data-rab-search]").fill("");
+    // Status filter: draft → 1 baris.
+    await rabTable.locator("[data-rab-status]").selectOption("draft");
+    await page.waitForTimeout(300);
+    rrows = await rabTable.locator("table tbody tr").count();
+    if (rrows === 1) ok(`${label} rab status filter narrows to 1 row`);
+    else fail(`${label} rab status filter: expected 1, got ${rrows}`);
+    await rabTable.locator("[data-rab-status]").selectOption("semua");
+    await page.waitForTimeout(300);
+    // Sort: klik header Total sekali = desc (3.250.000 terbesar di atas).
+    await rabTable.getByRole("button", { name: /Total/ }).click();
+    await page.waitForTimeout(300);
+    const rabDesc = await rabTable.locator("table tbody tr").first().textContent();
+    if ((rabDesc ?? "").includes("Rp 3.250.000")) ok(`${label} rab sort desc by total`);
+    else fail(`${label} rab sort desc: first row not 3.250.000`);
+    // Sort cycle: klik kedua = asc (600.000 di atas).
+    await rabTable.getByRole("button", { name: /Total/ }).click();
+    await page.waitForTimeout(300);
+    const rabAsc = await rabTable.locator("table tbody tr").first().textContent();
+    if (!(rabAsc ?? "").includes("Rp 600.000"))
+      fail(`${label} rab sort asc: first row not 600.000`);
+    await rabTable.getByRole("button", { name: /Total/ }).click();
+    await page.waitForTimeout(300);
+    // Expand: Rincian → grup kategori + subtotal + aksi sekunder (Tolak/Revisi/Cetak).
+    const rabRincian = rabTable.getByRole("button", { name: "Rincian", exact: true });
+    await rabRincian.first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await rabRincian.first().click();
+    await page.waitForTimeout(400);
+    const rabExp = (await rabTable.textContent()) ?? "";
+    if (!rabExp.includes("subtotal") || !rabExp.includes("PRODUCTION"))
+      fail(`${label} rab expand: no category group/subtotal`);
+    else if (rabExp.includes("Cetak")) ok(`${label} rab expand grup/subtotal + aksi sekunder`);
+    // Single-open: buka baris lain menutup yang pertama.
+    const rabRincian2 = rabTable.getByRole("button", { name: "Rincian", exact: true });
+    await rabRincian2.first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await rabRincian2.first().click();
+    await page.waitForTimeout(400);
+    const rabOpenCount = await rabTable.getByRole("button", { name: "Tutup", exact: true }).count();
+    if (rabOpenCount === 1) ok(`${label} rab expand single-open`);
+    else fail(`${label} rab expand: not single-open (${rabOpenCount})`);
+    // Builder di balik + (Q23): form tersembunyi sampai tombol + diklik.
+    await rabTable.getByRole("button", { name: "Tutup", exact: true }).first().click();
+    await page.waitForTimeout(200);
+    const rabFormBefore = await rabTable.locator("[data-rab-form]").count();
+    await rabTable.locator("[data-rab-toggle]").click();
+    await page.waitForTimeout(300);
+    if (rabFormBefore !== 0 || !(await rabTable.locator("[data-rab-form]").isVisible()))
+      fail(`${label} rab builder not behind + button`);
+    else ok(`${label} rab builder hidden behind + button`);
+    await rabTable.locator("[data-rab-toggle]").click(); // tutup builder
+    await page.waitForTimeout(200);
+    // Setujui sekali-klik (Q45): baris sent → #/transaksi + notice, tanpa confirm.
+    const setujuiBtn = rabTable.getByRole("button", { name: "Setujui", exact: true });
+    await setujuiBtn.first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await setujuiBtn.first().click();
+    await page.waitForTimeout(600);
+    const rabBanner = (await page.locator('[role="status"]').textContent()) ?? "";
+    if (page.url().split("#")[1] !== "/transaksi")
+      fail(`${label} setujui: hash is ${page.url()}`);
+    else if (rabBanner.includes("disetujui"))
+      ok(`${label} setujui 1-klik → #/transaksi + notice`);
+    else fail(`${label} setujui: notice missing (${rabBanner})`);
+    // Buat RAB dari Paket (Q19): salin baris → auto-pindah #/rab + builder terisi.
+    await navRab("Paket", "Paket 1 Camera");
+    await page.getByRole("button", { name: "Buat RAB", exact: true }).first().click();
+    await page.waitForTimeout(600);
+    if (page.url().split("#")[1] === "/rab"){
+      const bform = page.locator('[data-view="rab"] [data-rab-form]');
+      const btxt = (await bform.textContent()) ?? "";
+      if ((await bform.isVisible()) && btxt.includes("SONY FDR AX-40"))
+        ok(`${label} buat RAB → #/rab + baris tersalin ke builder`);
+      else fail(`${label} buat RAB: builder kosong / baris tak tersalin`);
+    } else 
+      fail(`${label} buat RAB: hash is ${page.url()}`);
+    // Confirm-timpa (Q21): builder sudah terisi → klik Buat RAB lagi muncul confirm.
+    await navRab("Paket", "Paket 1 Camera");
+    let rabConfirmShown = false;
+    page.once("dialog", (d) => {
+      rabConfirmShown = true;
+      d.dismiss();
+    });
+    await page.getByRole("button", { name: "Buat RAB", exact: true }).first().click();
+    await page.waitForTimeout(400);
+    if (rabConfirmShown) ok(`${label} buat RAB confirm-timpa saat builder terisi`);
+    else fail(`${label} buat RAB: confirm-timpa tidak muncul`);
 
     await go("Settings", "No. rekening");
     await go("Invoice", "INV-2026-0001");
