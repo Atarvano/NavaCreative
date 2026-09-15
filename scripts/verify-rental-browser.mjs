@@ -32,9 +32,11 @@ const STUB = {
       nama: "Nava Production",
       hp: "085817999140",
       email: "navaproduction9@gmail.com",
-      bank: "BCA",
-      norek: "8335463109",
-      atas_nama: "Luthfi Ahmad Zaidan",
+      // Sengaja beda dari bank_snapshot invoice (#61): print lama harus
+      // tetap memakai snapshot terbit, bukan settings live.
+      bank: "Mandiri",
+      norek: "8854012345678903",
+      atas_nama: "Nava Production",
     },
   },
   "/api/invoice": {
@@ -609,6 +611,15 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify(STUB[urlPath]));
     return;
   }
+  // Slot logo (redesign 08, #61): file opsional belum disuplai → 204 No Content
+  // supaya probe fetch/<img> tidak meninggalkan console error 404. Produksi:
+  // 404 diabaikan onerror/fallback; statis stub meniru "belum ada file" tanpa
+  // noise agar cek console-error tetap bermakna.
+  if (urlPath === "/img/logo-red.png") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   const path = join(DIST, urlPath);
   if (!existsSync(path)) {
     res.writeHead(404);
@@ -651,10 +662,17 @@ for (const [label, w, h] of [
       (await page.locator("form").count()) >= 1 &&
       (await page.locator("input[name=username]").count()) === 1 &&
       (await page.locator("input[name=password]").count()) === 1;
-    if (!hasForm) fail(`${label} login: form incomplete`);
+    // Poles login (#61): slot brand + fallback teks, tanpa ubah flow 2-step.
+    const loginBrand =
+      (await page.locator("[data-login-brand]").textContent()) ?? "";
+    if (!loginBrand.includes("Nava Creative"))
+      fail(`${label} login: brand fallback hilang`);
+    else if (!((await page.locator("#app").textContent()) ?? "").includes("Dashboard rental"))
+      fail(`${label} login: label Dashboard rental hilang`);
+    else if (!hasForm) fail(`${label} login: form incomplete`);
     else if (errs.length)
       fail(`${label} login: console errors: ${errs.join(" // ")}`);
-    else ok(`${label} login renders, 0 console errors`);
+    else ok(`${label} login renders + brand, 0 console errors`);
     await page.close();
   }
   // Dashboard: sidebar shell + hash nav + drawer, all views render.
@@ -665,6 +683,11 @@ for (const [label, w, h] of [
       if (m.type() === "error") errs.push(m.text());
     });
     page.on("pageerror", (e) => errs.push(String(e)));
+    // Stub window.print di semua window (termasuk popup cetak) — print dialog
+    // tak jalan headless dan akan menggantung document.write/onload=print.
+    await page.addInitScript(() => {
+      window.print = () => {};
+    });
     const isDesktop = w >= 768;
     // Deep link: hash #/invoice lands on the Invoice view (Q35).
     await page.goto(`${base}/dashboard.html#/invoice`);
@@ -740,6 +763,59 @@ for (const [label, w, h] of [
     )
       fail(`${label} invoice expand: riwayat/form bayar/form tempo hilang`);
     else ok(`${label} invoice table + overdue + filter + expand`);
+
+    // --- Cetak plek dokumen asli (redesign 08, #61) ---
+    // Cetak membuka window baru + document.write lalu auto print(). Print
+    // dialog tak bisa jalan headless → stub window.print di semua window lewat
+    // init-script, tangkap popup, baca HTML-nya, tutup.
+    const bacaPrint = async (klik) => {
+      const pop = page.waitForEvent("popup", { timeout: 4000 });
+      await klik();
+      const w = await pop;
+      await w.waitForLoadState("domcontentloaded");
+      await w.waitForTimeout(250);
+      const html = (await w.content()) ?? "";
+      await w.close();
+      return html;
+    };
+
+    // Print Invoice (plek 181411): judul merah, DARI vs KEPADA, TOTAL merah,
+    // seksi Pembayaran (dibayar + sisa bold + riwayat tanggal+label+metode) di
+    // antara TOTAL dan TRANSFER KE, bank dari snapshot terbit, terms 7 hari.
+    // invDetail invoice #1 masih terbuka dari blok expand di atas; tombol
+    // Cetak ada di baris expand (bukan baris nomor), jadi cari se-view.
+    let invPrint = "";
+    try {
+      invPrint = await bacaPrint(() =>
+        invTable.getByRole("button", { name: "Cetak", exact: true }).click(),
+      );
+    } catch (e) {
+      fail(`${label} print invoice: popup tak terbuka (${e.message})`);
+    }
+    if (invPrint) {
+      const low = invPrint.toLowerCase();
+      const iTot = low.indexOf("total");
+      const iPay = low.indexOf("pembayaran");
+      const iBank = low.indexOf("transfer ke");
+      if (
+        invPrint.includes("INVOICE") &&
+        low.includes("dari") &&
+        low.includes("kepada") &&
+        low.includes("dibayar") &&
+        low.includes("sisa") &&
+        invPrint.includes("DP") && // label riwayat bayar (B3)
+        invPrint.includes("BCA 8335463109 Luthfi Ahmad Zaidan") && // snapshot terbit
+        !invPrint.includes("Mandiri 8854012345678903 Nava Production") && // bukan settings live
+        iTot > -1 &&
+        iPay > iTot &&
+        iBank > iPay // seksi bayar di antara TOTAL dan TRANSFER KE
+      )
+        ok(`${label} print invoice plek + seksi bayar tengah + bank snapshot`);
+      else
+        fail(
+          `${label} print invoice: struktur plek salah (total=${iTot},pay=${iPay},bank=${iBank})`,
+        );
+    }
 
     const go = async (navLabel, text) => {
       // Non-exact: badge count ikut nama aksesibel tombol (e.g. "Transaksi 1").
@@ -1155,6 +1231,30 @@ for (const [label, w, h] of [
     else if ((await briefForm.textContent()).includes("Simpan brief"))
       ok(`${label} brief second-layer 11 fields inside expand`);
     else fail(`${label} brief form: no save button`);
+    // Print Brief (#61): kop PROJECT BRIEF + hanya field terisi (Q32).
+    // Expand saat ini = baris Nikahan Sinta (id 2) dengan brief terisi.
+    let briefPrint = "";
+    try {
+      briefPrint = await bacaPrint(() =>
+        txTable
+          .getByRole("button", { name: "Cetak brief", exact: true })
+          .click(),
+      );
+    } catch (e) {
+      fail(`${label} print brief: popup tak terbuka (${e.message})`);
+    }
+    if (briefPrint) {
+      if (
+        briefPrint.includes("PROJECT BRIEF") &&
+        briefPrint.includes("Nikahan Sinta") &&
+        briefPrint.includes("Objective") &&
+        briefPrint.includes("Live 1 camera") &&
+        briefPrint.includes("Batam Center") &&
+        !briefPrint.includes("Audience") // field kosong tidak dicetak
+      )
+        ok(`${label} print brief kop + field terisi saja`);
+      else fail(`${label} print brief: kop/field terisi salah`);
+    }
     // Walk-in di balik + (Q13): form hidden until toggled.
     const walkinRowsBefore = await txTable
       .locator("[data-walkin-form]")
@@ -1279,6 +1379,32 @@ for (const [label, w, h] of [
       .count();
     if (rabOpenCount === 1) ok(`${label} rab expand single-open`);
     else fail(`${label} rab expand: not single-open (${rabOpenCount})`);
+    // Print RAB (#61): kop RAB + PROJECT vs UNTUK + grup/subtotal + TOTAL
+    // FINAL + nomor sistem, tanggal Indonesia pendek. Setelah sort cycle + 2x
+    // expand, RAB terbuka = baris termurah (RAB-2026-0002).
+    let rabPrint = "";
+    try {
+      rabPrint = await bacaPrint(() =>
+        rabTable.getByRole("button", { name: "Cetak", exact: true }).click(),
+      );
+    } catch (e) {
+      fail(`${label} print rab: popup tak terbuka (${e.message})`);
+    }
+    if (rabPrint) {
+      if (
+        rabPrint.includes("RANCANGAN ANGGARAN BIAYA") &&
+        rabPrint.includes("RAB-2026-0002") &&
+        rabPrint.includes("Akad Nikah Rina") &&
+        rabPrint.includes("5 Agu 2026") &&
+        rabPrint.includes("Foto Akad") &&
+        rabPrint.includes("PRODUCTION") &&
+        rabPrint.includes("Subtotal PRODUCTION") &&
+        rabPrint.includes("TOTAL FINAL") &&
+        rabPrint.includes("estimasi")
+      )
+        ok(`${label} print rab plek + nomor + tanggal ID`);
+      else fail(`${label} print rab: kop/grup/total/tanggal salah`);
+    }
     // Builder di balik + (Q23): form tersembunyi sampai tombol + diklik.
     await rabTable
       .getByRole("button", { name: "Tutup", exact: true })
@@ -1466,6 +1592,14 @@ for (const [label, w, h] of [
     }
 
     await go("Settings", "No. rekening");
+    // Settings (#61): sebut path logo kop cetak (Q29) — identitas/bank tetap.
+    const logoNote = (await page.locator("[data-logo-note]").textContent()) ?? "";
+    if (
+      !logoNote.includes("public/img/logo-red.png") ||
+      !logoNote.includes("img/logo-red.png")
+    )
+      fail(`${label} settings: path logo kop cetak hilang`);
+    else ok(`${label} settings logo path + identitas/bank`);
     await go("Invoice", "INV-2026-0001");
     // Browser back returns to the previous view via hash history (Q35).
     await page.goBack();
