@@ -592,6 +592,49 @@
   let byJumlah = $state('');
   let byMetode = $state('transfer');
 
+  // --- Redesign 04 (#57): tabel Invoice — search + status(+overdue) + sort
+  // + expand riwayat + form bayar lapis-dua + ubah tempo via PATCH. Pola
+  // tabel meniru RAB (#56) / Transaksi (#55). Filter state sesi (Q35).
+  let invSearch = $state('');
+  let invStatusFilter = $state('semua');
+  let invSortKey = $state(null); // null = id desc (default terbaru)
+  let invSortDesc = $state(true);
+  let invTempo = $state('');
+
+  const INV_STATUSES = ['unpaid', 'partial', 'paid', 'batal'];
+
+  // Client join sisi-FE (Q24): invoice tak bawa nama_client → tarik dari
+  // transaksi induknya. Search: nomor + client. Overdue = opsi status ekstra.
+  const invClient = (i) => transaksi.find((t) => t.id === i.transaksi_id)?.nama_client ?? '';
+  const invFiltered = $derived(
+    (() => {
+      const q = invSearch.trim().toLowerCase();
+      let rows = invoices.filter((i) => {
+        const okStatus =
+          invStatusFilter === 'semua' ||
+          (invStatusFilter === 'overdue' ? i.overdue : i.status === invStatusFilter);
+        const hay = [i.nomor, invClient(i)].filter(Boolean).join(' ').toLowerCase();
+        return okStatus && (!q || hay.includes(q));
+      });
+      if (invSortKey) {
+        const dir = invSortDesc ? -1 : 1;
+        rows = [...rows].sort((a, b) => (a[invSortKey] > b[invSortKey] ? 1 : a[invSortKey] < b[invSortKey] ? -1 : 0) * dir);
+      }
+      return rows;
+    })(),
+  );
+
+  // Sort satu kolom client-side (Q24) — Total / Tempo; klik cycle desc→asc→terbaru.
+  function invUrutkan(key) {
+    if (invSortKey === key) {
+      if (!invSortDesc) invSortKey = null; // klik ketiga: kembali ke terbaru
+      else invSortDesc = false;
+    } else {
+      invSortKey = key;
+      invSortDesc = true;
+    }
+  }
+
   // Terbitkan = primer sekali-klik (Q45: tanpa confirm — void + koreksi
   // minus tetap pengaman), tempo default H+7, auto-pindah #/invoice + notice.
   // H+7 dihitung tanggal LOKAL, bukan UTC (toISOString bisa geser sehari
@@ -617,12 +660,39 @@
   }
 
   async function bukaInvoice(i) {
+    // Expand seragam (Q25): single-open; isi ulang draft tempo saat buka.
     openInvoiceId = openInvoiceId === i.id ? null : i.id;
     invDetail = null;
     if (openInvoiceId) {
+      invTempo = i.jatuh_tempo;
       const { res, data } = await api(`/api/invoice/${i.id}`);
       if (res.ok) invDetail = data;
     }
+  }
+
+  // Bayar cepat primer (Q17): satu klik dari baris → buka expand langsung
+  // ke form bayar (lapis-dua), tak perlu Rincian dulu.
+  function bayarCepat(i) {
+    if (openInvoiceId !== i.id) bukaInvoice(i);
+    byJumlah = i.sisa > 0 ? String(i.sisa) : '';
+  }
+
+  // Ubah jatuh tempo via PATCH (redesign #57): full invoice balik → sync
+  // list + detail. Overdue ikut berubah (turunan dari tempo).
+  async function simpanTempo(i, e) {
+    e.preventDefault();
+    error = '';
+    const { res, data } = await api(`/api/invoice/${i.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ jatuh_tempo: invTempo }),
+    });
+    if (!res.ok) {
+      error = data.error ?? 'Gagal mengubah jatuh tempo.';
+      return;
+    }
+    notice = `Tempo ${i.nomor} diubah ke ${tgl(data.jatuh_tempo)}.`;
+    invDetail = invDetail ? { ...invDetail, ...data } : invDetail;
+    await load();
   }
 
   async function bayar(i, e) {
@@ -736,6 +806,7 @@
       briefOpenId = null;
     }
     if (v !== 'rab') openRabId = null;
+    if (v !== 'invoice') openInvoiceId = null;
     if (v === 'ringkasan') {
       const { res, data } = await api('/api/ringkasan');
       if (res.ok) ringkasan = data;
@@ -938,6 +1009,72 @@
       {/if}
       <button class="underline" onclick={() => printRab(r)}>Cetak</button>
     </div>
+  </td></tr>
+  {/if}
+{/snippet}
+
+{#snippet invRow(i)}
+  <tr class="border-b border-ash align-top scroll-mt-24 {openInvoiceId === i.id ? 'bg-canvas' : ''}">
+    <td class="px-3 py-3 whitespace-nowrap">{i.nomor}</td>
+    <td class="px-3 py-3"><p class="text-body font-normal">{invClient(i) || '—'}</p></td>
+    <td class="px-3 py-3 text-right">{rupiah(i.total)}</td>
+    <td class="px-3 py-3 text-right">{rupiah(i.dibayar)}</td>
+    <!-- Sisa bold saat overdue (Q17) biar yang ditagih paling menonjol. -->
+    <td class="px-3 py-3 text-right {i.overdue ? 'font-medium' : ''}">{rupiah(i.sisa)}</td>
+    <td class="px-3 py-3 whitespace-nowrap">{tgl(i.jatuh_tempo)}</td>
+    <td class="px-3 py-3"><span class="rounded-pill px-3 py-1 text-caption {chipCls(i.status, i.overdue)}">{i.status}{i.overdue ? ' · overdue' : ''}</span></td>
+    <td class="px-3 py-3">
+      <div class="flex flex-wrap justify-end gap-3">
+        {#if i.status !== 'paid' && i.status !== 'batal'}
+          <button class="underline scroll-mt-32" onclick={() => bayarCepat(i)} data-inv-bayar>Bayar</button>
+        {/if}
+        <button class="underline scroll-mt-32" onclick={() => bukaInvoice(i)}>{openInvoiceId === i.id ? 'Tutup' : 'Rincian'}</button>
+      </div>
+    </td>
+  </tr>
+  {#if openInvoiceId === i.id}
+  <tr class="bg-canvas"><td colspan="8" class="px-3 py-4">
+    {#if invDetail}
+      <!-- Riwayat bayar: tanggal + label DP/Cicilan/Pelunasan + metode (B3). -->
+      <p class="text-caption uppercase text-graphite">Riwayat pembayaran — dibayar {rupiah(i.dibayar)} · sisa {rupiah(i.sisa)}</p>
+      {#if invDetail.bayar.length}
+        <ul class="mt-2 grid gap-1 text-body-sm">
+          {#each invDetail.bayar as p (p.id)}
+            <li class="flex justify-between gap-2"><span>{tgl(p.tanggal)} ({p.label}) — {p.metode}</span><span>{rupiah(p.jumlah)}</span></li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="mt-2 text-body-sm text-graphite">Belum ada pembayaran.</p>
+      {/if}
+
+      <!-- Form bayar lapis-dua (Q18); minus = koreksi (M1); batal → terkunci. -->
+      {#if i.status !== 'batal'}
+        <form class="mt-4 grid gap-3 border-t border-ash pt-4 max-md:grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end" onsubmit={(e) => bayar(i, e)} data-inv-bayar-form>
+          <p class="text-body font-normal md:col-span-4">Catat pembayaran</p>
+          <label class="grid gap-1 text-body-sm">Tanggal<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" required bind:value={byTanggal} /></label>
+          <label class="grid gap-1 text-body-sm">Jumlah (Rp, minus = koreksi)<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" step="1" required bind:value={byJumlah} /></label>
+          <label class="grid gap-1 text-body-sm">Metode<select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={byMetode}><option value="transfer">transfer</option><option value="cash">cash</option></select></label>
+          <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white max-md:w-full" type="submit">Catat bayar</button>
+        </form>
+
+        <!-- Ubah jatuh tempo via PATCH (redesign #57); overdue ikut turunan. -->
+        <form class="mt-4 grid gap-3 border-t border-ash pt-4 max-md:grid-cols-1 md:grid-cols-[1fr_auto] md:items-end" onsubmit={(e) => simpanTempo(i, e)} data-inv-tempo-form>
+          <label class="grid gap-1 text-body-sm">Jatuh tempo<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" required bind:value={invTempo} /></label>
+          <button class="rounded-pill border border-ash px-5 py-2 text-body-sm max-md:w-full" type="submit">Simpan tempo</button>
+        </form>
+      {:else}
+        <p class="mt-4 border-t border-ash pt-4 text-body-sm text-graphite">Invoice dibatalkan — pembayaran & tempo terkunci, riwayat tetap tersimpan.</p>
+      {/if}
+
+      <div class="mt-4 flex flex-wrap gap-4 text-body-sm">
+        <button class="underline" onclick={printInvoice}>Cetak</button>
+        {#if i.status !== 'paid' && i.status !== 'batal'}
+          <button class="underline" onclick={() => voidInvoice(i)}>Batalkan</button>
+        {/if}
+      </div>
+    {:else}
+      <p class="text-body-sm text-graphite">Memuat…</p>
+    {/if}
   </td></tr>
   {/if}
 {/snippet}
@@ -1340,46 +1477,47 @@
     </section>
     {/if}
     {#if view === 'invoice'}
-    <section class="mt-12">
+    <section class="mt-8" data-view="invoice">
       <h2 class="text-subheading font-normal">Invoice</h2>
       {#if !invoices.length}
+        <!-- Empty state: satu baris + CTA (Q34). -->
         <p class="mt-4 text-body-sm text-graphite">Belum ada invoice. Terbitkan dari Transaksi lewat tombol “Terbitkan invoice”.</p>
       {:else}
-        <ul class="mt-4 grid gap-4">
-          {#each invoices as i (i.id)}
-            <li class="border border-ash bg-bone-white p-4">
-              <div class="flex flex-wrap items-baseline justify-between gap-2">
-                <p class="text-body font-normal">{i.nomor}</p>
-                <span class="rounded-pill px-3 py-1 text-caption {chipCls(i.status, i.overdue)}">{i.status}{i.overdue ? ' · overdue' : ''}</span>
-              </div>
-              <p class="mt-1 text-body-sm text-graphite">Total {rupiah(i.total)} · Dibayar {rupiah(i.dibayar)} · Sisa {rupiah(i.sisa)} · Tempo {tgl(i.jatuh_tempo)}</p>
-              <div class="mt-2 flex flex-wrap gap-4 text-body-sm">
-                <button class="underline" onclick={() => bukaInvoice(i)}>{openInvoiceId === i.id ? 'Tutup' : 'Bayar & rincian'}</button>
-                {#if i.status !== 'paid' && i.status !== 'batal'}<button class="underline" onclick={() => voidInvoice(i)}>Batalkan</button>{/if}
-                {#if openInvoiceId === i.id}
-                  <button class="underline" onclick={printInvoice}>Cetak</button>
-                {/if}
-              </div>
-              {#if openInvoiceId === i.id}
-                {#if invDetail}
-                  {#if invDetail.bayar.length}
-                    <ul class="mt-3 grid gap-1 border-t border-ash pt-3 text-body-sm">
-                      {#each invDetail.bayar as p (p.id)}
-                        <li class="flex justify-between gap-2"><span>{tgl(p.tanggal)} ({p.label}) — {p.metode}</span><span>{rupiah(p.jumlah)}</span></li>
-                      {/each}
-                    </ul>
-                  {/if}
-                  <form class="mt-3 grid gap-3 max-md:grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end" onsubmit={(e) => bayar(i, e)}>
-                    <label class="grid gap-1 text-body-sm">Tanggal<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" required bind:value={byTanggal} /></label>
-                    <label class="grid gap-1 text-body-sm">Jumlah (Rp, minus = koreksi)<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" step="1" required bind:value={byJumlah} /></label>
-                    <label class="grid gap-1 text-body-sm">Metode<select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={byMetode}><option value="transfer">transfer</option><option value="cash">cash</option></select></label>
-                    <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white" type="submit">Catat bayar</button>
-                  </form>
-                {/if}
-              {/if}
-            </li>
-          {/each}
-        </ul>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <input class="min-w-40 flex-1 rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" placeholder="Cari nomor / client" bind:value={invSearch} data-inv-search />
+        <select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={invStatusFilter} data-inv-status>
+          <option value="semua">semua status</option>
+          {#each INV_STATUSES as s (s)}<option value={s}>{s}</option>{/each}
+          <option value="overdue">overdue</option>
+        </select>
+      </div>
+
+      {#if !invFiltered.length}
+        <!-- Filter-miss beda dari empty: tawarkan reset (Q34). -->
+        <p class="mt-4 text-body-sm text-graphite">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { invSearch = ''; invStatusFilter = 'semua'; }}>Reset</button></p>
+      {:else}
+      <div class="mt-4 overflow-x-auto">
+        <table class="w-full min-w-[720px] border-collapse text-body-sm">
+          <thead class="bg-bone-white md:sticky md:top-0">
+            <tr class="border-b border-ash text-left">
+              <th class="px-3 py-2 font-normal">Nomor</th>
+              <th class="px-3 py-2 font-normal">Client</th>
+              <th class="px-3 py-2 text-right font-normal"><button class="underline {invSortKey === 'total' ? 'font-medium' : ''}" onclick={() => invUrutkan('total')}>Total {invSortKey === 'total' ? (invSortDesc ? '↓' : '↑') : ''}</button></th>
+              <th class="px-3 py-2 text-right font-normal">Dibayar</th>
+              <th class="px-3 py-2 text-right font-normal">Sisa</th>
+              <th class="px-3 py-2 font-normal"><button class="underline {invSortKey === 'jatuh_tempo' ? 'font-medium' : ''}" onclick={() => invUrutkan('jatuh_tempo')}>Tempo {invSortKey === 'jatuh_tempo' ? (invSortDesc ? '↓' : '↑') : ''}</button></th>
+              <th class="px-3 py-2 font-normal">Status</th>
+              <th class="px-3 py-2 text-right font-normal">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each invFiltered as i (i.id)}
+              {@render invRow(i)}
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      {/if}
       {/if}
     </section>
     {/if}

@@ -68,6 +68,41 @@ const STUB = {
       },
     ],
   },
+  // Detail untuk expand Invoice (redesign 04, #57): riwayat bayar berlabel.
+  "/api/invoice/1": {
+    id: 1,
+    transaksi_id: 1,
+    nomor: "INV-2026-0001",
+    tanggal_terbit: "2026-08-17",
+    jatuh_tempo: "2026-08-24",
+    total: 5500000,
+    bank_snapshot: "BCA 8335463109 Luthfi Ahmad Zaidan",
+    status: "partial",
+    dibayar: 2000000,
+    sisa: 3500000,
+    overdue: false,
+    bayar: [
+      { id: 1, tanggal: "2026-08-18", jumlah: 2000000, metode: "transfer", referensi: "", label: "DP" },
+    ],
+    transaksi: { id: 1, nama_project: "Drone Bandar Baru", nama_client: "Pak Suhaimi" },
+    baris: [],
+  },
+  "/api/invoice/2": {
+    id: 2,
+    transaksi_id: 2,
+    nomor: "INV-2026-0002",
+    tanggal_terbit: "2026-08-01",
+    jatuh_tempo: "2026-08-07",
+    total: 900000,
+    bank_snapshot: "BCA 8335463109 Luthfi Ahmad Zaidan",
+    status: "unpaid",
+    dibayar: 0,
+    sisa: 900000,
+    overdue: true,
+    bayar: [],
+    transaksi: { id: 2, nama_project: "Nikahan Sinta", nama_client: "Sinta" },
+    baris: [],
+  },
   "/api/transaksi": {
     transaksi: [
       // API asli `ORDER BY id DESC` — terbaru dulu (default newest-first).
@@ -495,12 +530,41 @@ for (const [label, w, h] of [
         `${label} sidebar: visibility wrong (visible=${await sidebar.isVisible()}, desktop=${isDesktop})`,
       );
     const invBody = (await page.locator("#app").textContent()) ?? "";
-    if (
-      !invBody.includes("INV-2026-0001") ||
-      !invBody.includes("Tempo 24 Agu 2026")
-    )
+    if (!invBody.includes("INV-2026-0001") || !invBody.includes("24 Agu 2026"))
       fail(`${label} hash #/invoice: invoice view not shown`);
     else ok(`${label} hash #/invoice lands on Invoice (tanggal Indonesia)`);
+
+    // --- Tabel Invoice (redesign 04, #57) ---
+    const invTable = page.locator('[data-view="invoice"]');
+    // Kolom sesuai kontrak: Nomor|Client|Total|Dibayar|Sisa|Tempo|Status|Aksi.
+    const invHead = (await invTable.locator("table thead").textContent()) ?? "";
+    for (const col of ["Nomor", "Client", "Total", "Dibayar", "Sisa", "Tempo", "Status", "Aksi"])
+      if (!invHead.includes(col)) fail(`${label} invoice table: kolom ${col} hilang`);
+    // Client join sisi-FE dari transaksi induk (INV-...-0001 → Pak Suhaimi).
+    if (!invBody.includes("Pak Suhaimi")) fail(`${label} invoice table: client join hilang`);
+    // Overdue menonjol (Q17): chip merah 'overdue' + sisa bold di baris INV-...-0002.
+    const invOdRow = invTable.locator("table tbody tr", { hasText: "INV-2026-0002" }).first();
+    const invOdText = (await invOdRow.textContent()) ?? "";
+    if (!invOdText.includes("overdue")) fail(`${label} invoice table: chip overdue hilang`);
+    if (!(await invOdRow.locator("td").nth(4).getAttribute("class")).includes("font-medium"))
+      fail(`${label} invoice table: sisa overdue tidak bold`);
+    // Bayar cepat primer ada di baris belum-lunas, hilang di baris lunas/batal.
+    if ((await invTable.locator("[data-inv-bayar]").count()) !== 2)
+      fail(`${label} invoice table: Bayar cepat harus ada di 2 baris belum-lunas`);
+    // Filter status 'overdue' menyisakan hanya baris overdue.
+    await invTable.locator("[data-inv-status]").selectOption("overdue");
+    await page.waitForTimeout(200);
+    const invOdRows = await invTable.locator("table tbody tr").count();
+    if (invOdRows !== 1) fail(`${label} invoice filter overdue: expected 1 row, got ${invOdRows}`);
+    await invTable.locator("[data-inv-status]").selectOption("semua");
+    await page.waitForTimeout(200);
+    // Expand via Rincian: riwayat bayar + form bayar lapis-dua + form tempo muncul.
+    await invTable.locator("table tbody tr", { hasText: "INV-2026-0001" }).first().getByRole("button", { name: "Rincian" }).click();
+    await page.waitForTimeout(350);
+    const invExpand = (await invTable.textContent()) ?? "";
+    if (!invExpand.includes("Riwayat pembayaran") || !invExpand.includes("Catat pembayaran") || !invExpand.includes("Jatuh tempo"))
+      fail(`${label} invoice expand: riwayat/form bayar/form tempo hilang`);
+    else ok(`${label} invoice table + overdue + filter + expand`);
 
     const go = async (navLabel, text) => {
       // Non-exact: badge count ikut nama aksesibel tombol (e.g. "Transaksi 1").
