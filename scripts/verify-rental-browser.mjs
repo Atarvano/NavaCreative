@@ -433,6 +433,36 @@ const STUB = {
       },
     ],
   },
+  // CRUD Paket (redesign 07, #60): PATCH balikin paket yang sudah diubah —
+  // baris diganti wholesale + subtotal/total dihitung ulang, persis kontrak
+  // api/paket.js. Dokumen lama tak disentuh (snapshot milik sendiri).
+  "/api/paket/2": {
+    id: 2,
+    nama: "Paket 2 Camera v2",
+    deskripsi: "",
+    total: 1200000,
+    subtotal: { PRODUCTION: 1050000, LOGISTIK: 150000 },
+    baris: [
+      {
+        id: 90,
+        kategori: "PRODUCTION",
+        jenis: "alat",
+        nama: "SONY NXR-100",
+        qty: 3,
+        satuan: "Unit",
+        harga_satuan: 350000,
+      },
+      {
+        id: 91,
+        kategori: "LOGISTIK",
+        jenis: "biaya",
+        nama: "INTERNET",
+        qty: 1,
+        satuan: "Sesi",
+        harga_satuan: 150000,
+      },
+    ],
+  },
   // Buat RAB dari Paket (Q19): baris disalin ke builder di #/rab.
   "/api/paket/1/ke-rab": {
     nama_project: "Paket 1 Camera",
@@ -540,10 +570,29 @@ const STUB = {
 
 const server = createServer((req, res) => {
   const urlPath = decodeURIComponent(req.url.split("?")[0]);
-  // Write-stub (redesign #59, Alat saja): arsip PATCH dicatat supaya assert
-  // bisa memastikan flag is_active terkirim — aksi arsip tak no-op sunyi.
-  // Write non-GET lain sengaja dibiarkan jatuh ke fallback 404 lama (dist/
-  // statis tanpa API) — fallback blanket mengubah assert terbitkan invoice.
+  // Write-stub (redesign #59 Alat, #60 Paket): PATCH arsip + CRUD paket
+  // dicatat supaya assert bisa memastikan kontrak terkirim — aksi tak no-op
+  // sunyi. Write non-GET lain sengaja jatuh ke fallback 404 lama.
+  if (req.method !== "GET" && urlPath.startsWith("/api/paket")) {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      writes.push({ method: req.method, path: urlPath, body });
+      if (req.method === "PATCH" && /^\/api\/paket\/\d+$/.test(urlPath)) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(STUB[urlPath] ?? { ok: true }));
+        return;
+      }
+      if (req.method === "POST" && urlPath === "/api/paket") {
+        res.writeHead(201, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ id: 99, nama: "Paket Dokumentasi" }));
+        return;
+      }
+      res.writeHead(404);
+      res.end("nope");
+    });
+    return;
+  }
   if (req.method !== "GET" && urlPath.startsWith("/api/alat")) {
     if (req.method === "PATCH" && /^\/api\/alat\/\d+$/.test(urlPath)) {
       writes.push({ path: urlPath });
@@ -1293,6 +1342,129 @@ for (const [label, w, h] of [
     if (rabConfirmShown)
       ok(`${label} buat RAB confirm-timpa saat builder terisi`);
     else fail(`${label} buat RAB: confirm-timpa tidak muncul`);
+
+    // --- Paket CRUD UI (redesign 07, #60) ---
+    // Tambah di balik + (Q23); expand grup kategori + subtotal + total;
+    // Ubah = form terisi baris lama (PATCH wholesale, dokumen lama utuh);
+    // tanpa DELETE (spirit B4); Buat RAB tetap jalan.
+    await navRab("Paket", "Paket 1 Camera");
+    const pkView = page.locator('[data-view="paket"]');
+    const pkTxt = () => pkView.textContent();
+    // Judul kiri + aksi kanan (Q5); form tambah tersembunyi sebelum + diklik.
+    if ((await pkView.locator("[data-paket-toggle]").count()) !== 1)
+      fail(`${label} paket: tombol + Paket baru hilang`);
+    if ((await pkView.locator("[data-paket-form]").count()) !== 0)
+      fail(`${label} paket: form tambah harus tersembunyi default`);
+    // Tanpa DELETE (B4): tak ada tombol hapus paket di mana pun.
+    if ((await pkView.getByRole("button", { name: /Hapus paket/i }).count()) !== 0)
+      fail(`${label} paket: tombol hapus paket ada — tanpa DELETE (B4)`);
+    // Expand: grup kategori + subtotal + total (plek dokumen, Q15).
+    await pkView
+      .locator("[data-paket-card]")
+      .first()
+      .getByRole("button", { name: /baris/ })
+      .click();
+    await page.waitForTimeout(350);
+    const pkExp = (await pkTxt()) ?? "";
+    if (
+      !pkExp.includes("PRODUCTION") ||
+      !pkExp.includes("subtotal") ||
+      !pkExp.includes("SONY FDR AX-40")
+    )
+      fail(`${label} paket expand: grup kategori/subtotal hilang`);
+    else ok(`${label} paket expand grup kategori + subtotal`);
+    // Form tambah di balik + (Q23); tutup = buang isian.
+    await pkView.locator("[data-paket-toggle]").click();
+    await page.waitForTimeout(250);
+    if ((await pkView.locator("[data-paket-form]").count()) === 1){
+      // Tambah baris kategori/jenis/qty/satuan/rate + subtotal & total tampil.
+      const f = pkView.locator("[data-paket-form]");
+      await f.locator("input[name=nama]").fill("Paket Dokumentasi");
+      await f.locator("[data-pk-item]").fill("Dokumentasi foto");
+      await f.locator("[data-pk-jenis]").selectOption("jasa");
+      await f.locator("[data-pk-qty]").fill("2");
+      await f.locator("[data-pk-satuan]").fill("Sesi");
+      await f.locator("[data-pk-harga]").fill("400000");
+      await f.locator("[data-pk-tambah-baris]").click();
+      await page.waitForTimeout(250);
+      const ftxt = (await f.textContent()) ?? "";
+      if (!ftxt.includes("Dokumentasi foto") || !ftxt.includes("800.000"))
+        fail(`${label} paket tambah: baris/subtotal tak tampil`);
+      else ok(`${label} paket tambah form + baris + subtotal tampil`);
+      // Simpan → POST /api/paket terkirim (201 di stub) + notice.
+      await f.getByRole("button", { name: /Simpan paket/ }).click();
+      await page.waitForTimeout(500);
+      const post = writes.find(
+        (w) => w.method === "POST" && w.path === "/api/paket",
+      );
+      if (post) {
+        let sent = {};
+        try {
+          sent = JSON.parse(post.body);
+        } catch {
+          fail(`${label} paket tambah: body POST bukan JSON: ${post.body}`);
+        }
+        if (
+          sent.nama === "Paket Dokumentasi" &&
+          Array.isArray(sent.baris) &&
+          sent.baris.length === 1 &&
+          sent.baris[0].qty === 2 &&
+          sent.baris[0].harga_satuan === 400000
+        )
+          ok(`${label} paket tambah → POST kontrak benar`);
+        else if (sent.nama !== undefined)
+          fail(`${label} paket tambah: body POST salah: ${post.body}`);
+      } else fail(`${label} paket tambah: POST /api/paket tak tercatat`);
+    } else 
+      fail(`${label} paket: form tambah tak terbuka di balik +`);
+    // Ubah paket (PATCH wholesale): form terisi baris lama + notice snapshot.
+    {
+      const card2 = pkView.locator('[data-paket-card][data-paket-id="2"]');
+      await card2.getByRole("button", { name: "Ubah", exact: true }).click();
+      await page.waitForTimeout(300);
+      const uf = card2.locator("[data-paket-edit-form]");
+      if ((await uf.count()) === 1){
+        const utxt = (await uf.textContent()) ?? "";
+        if (
+          !utxt.includes("SONY NXR-100") ||
+          !utxt.includes("tidak mengubah RAB/Transaksi lama")
+        )
+          fail(`${label} paket ubah: baris lama / notice snapshot hilang`);
+        // Tambah baris LOGISTIK → PATCH baris wholesale terkirim.
+        await uf.locator("[data-pk-item]").fill("INTERNET");
+        await uf.locator("[data-pk-jenis]").selectOption("biaya");
+        await uf.locator("[data-pk-kategori]").selectOption("LOGISTIK");
+        await uf.locator("[data-pk-qty]").fill("1");
+        await uf.locator("[data-pk-satuan]").fill("Sesi");
+        await uf.locator("[data-pk-harga]").fill("150000");
+        await uf.locator("[data-pk-tambah-baris]").click();
+        await page.waitForTimeout(250);
+        await uf.getByRole("button", { name: /Simpan perubahan/ }).click();
+        await page.waitForTimeout(500);
+        const patch = writes.find(
+          (w) => w.method === "PATCH" && w.path === "/api/paket/2",
+        );
+        if (patch){
+          let sent = {};
+          try {
+            sent = JSON.parse(patch.body);
+          } catch {
+            fail(`${label} paket ubah: body PATCH bukan JSON: ${patch.body}`);
+          }
+          if (
+            Array.isArray(sent.baris) &&
+            sent.baris.length === 2 &&
+            sent.baris[1].kategori === "LOGISTIK" &&
+            sent.baris[1].harga_satuan === 150000
+          )
+            ok(`${label} paket ubah → PATCH baris wholesale (snapshot aman)`);
+          else if (sent.baris !== undefined)
+            fail(`${label} paket ubah: body PATCH salah: ${patch.body}`);
+        } else 
+          fail(`${label} paket ubah: PATCH /api/paket/2 tak tercatat`);
+      } else 
+        fail(`${label} paket ubah: form edit tak terbuka`);
+    }
 
     await go("Settings", "No. rekening");
     await go("Invoice", "INV-2026-0001");

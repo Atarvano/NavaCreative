@@ -2,6 +2,8 @@
 // Spins the Hono app against a tiny in-memory D1 sham (admins + sessions +
 // paket + paket_baris seeded with the 4 Excel packages as-is, Y2 anomalies
 // included), then runs the acceptance cases.
+// Redesign 07 (#60): sham juga menutup snapshot-safety — PATCH baris paket
+// tidak menulis ulang rab_baris dokumen lama (milik sendiri, Q12/Q21).
 // Usage: node scripts/check-paket.mjs (exit 0 = all pass).
 import { webcrypto } from 'node:crypto';
 
@@ -76,6 +78,12 @@ const seedRows = [
 let seq = 100;
 const baris = seedRows.map((r) => ({ id: ++seq, paket_id: r[0], kategori: r[1], jenis: r[2], alat_id: null, nama: r[3], qty: r[4], satuan: r[5], harga_satuan: r[6] }));
 let pseq = 4;
+// Snapshot lama (#60): RAB yang dibuat dari Paket 1 menyalin barisnya saat
+// itu juga. Tabel ini sengaja tak pernah tersentuh route paket — satu-satunya
+// cara assert 'dokumen lama utuh' adalah tabel terpisah yang diawasi.
+const rabBaris = [
+  { id: 1, rab_id: 1, kategori: 'PRODUCTION', jenis: 'alat', nama: 'SONY FDR AX-40', qty: 1, satuan: 'Unit', harga_satuan: 100000 },
+];
 
 const DB = {
   prepare(sql) {
@@ -120,6 +128,8 @@ const DB = {
           for (let i = baris.length - 1; i >= 0; i--) if (baris[i].paket_id === a[0]) baris.splice(i, 1);
           return {};
         }
+        if (s.includes('rab') || s.includes('transaksi'))
+          throw new Error(`sham: route paket tak boleh menyentuh dokumen: ${s}`);
         throw new Error(`sham: unhandled RUN ${s}`);
       },
     };
@@ -202,7 +212,23 @@ const call = (path, opts = {}) =>
   });
 }
 
-// 6. No DELETE route by design (same spirit as B4).
+// 6. Snapshot-safety (#60): PATCH baris paket mengganti baris wholesale,
+// tapi rab_baris dokumen lama tak ikut berubah — snapshot milik sendiri.
+{
+  const before = structuredClone(rabBaris);
+  const res = await call('/api/paket/1', json({ baris: [
+    { kategori: 'PRODUCTION', jenis: 'alat', nama: 'SONY FDR AX-40', qty: 1, satuan: 'Unit', harga_satuan: 999000 },
+  ] }, 'PATCH'));
+  const body = await res.json();
+  check('patch baris → dokumen lama utuh (snapshot)', () => {
+    must(res.status === 200, `status ${res.status}`);
+    must(body.total === 999000, `total paket baru ${body.total}`);
+    must(JSON.stringify(rabBaris) === JSON.stringify(before), 'rab_baris ikut berubah — snapshot rusak');
+    must(rabBaris[0].harga_satuan === 100000, `snapshot lama ${rabBaris[0].harga_satuan}`);
+  });
+}
+
+// 7. No DELETE route by design (same spirit as B4).
 {
   const del = await call('/api/paket/1', { method: 'DELETE', ...authed });
   check('DELETE paket → 404 (tak ada route)', () => must(del.status === 404, `status ${del.status}`));
