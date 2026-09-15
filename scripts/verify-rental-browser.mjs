@@ -22,9 +22,9 @@ const MIME = {
   ".woff2": "font/woff2",
 };
 
-// Stub: logged in as admin; two alat — one paid off, one not — so the
-// balik-modal badge branch renders in the browser (pendapatan counts only
-// jenis=alat rows per Q13; transaksi tables land in #44, stub fakes it).
+// Stub: logged in as admin; per-alat rows cover all three balik-modal badge
+// tiers (#59) — pendapatan counts only jenis=alat rows per Q13; transaksi
+// tables land in #44, stub fakes it.
 const STUB = {
   "/api/auth/me": { username: "admin" },
   "/api/settings": {
@@ -228,6 +228,10 @@ const STUB = {
       notes: "",
     },
   },
+  // Tiga alat menutup tiga tier badge Balik modal (#59): hijau (balik
+  // modal), kuning (kurang ≤3 event), merah (jauh) + satu arsip untuk
+  // toggle default-sembunyi. Tier diturunkan FE dari modal/pendapatan/
+  // tarif_event — API tak berubah.
   "/api/alat": {
     alat: [
       {
@@ -240,8 +244,20 @@ const STUB = {
         pendapatan: 12_000_000,
         balik_modal: true,
       },
+      // Kuning: sisa 400rb = kurang 2 event pada tarif 200rb/event.
       {
         id: 2,
+        nama: "Sony FDR AX-40",
+        harga_beli: 5_000_000,
+        tarif_event: 200_000,
+        is_active: 1,
+        modal: 5_600_000,
+        pendapatan: 5_200_000,
+        balik_modal: false,
+      },
+      // Merah: pendapatan 0, kurang 10 event (>3).
+      {
+        id: 3,
         nama: "Tripod B-18",
         harga_beli: 500_000,
         tarif_event: 50_000,
@@ -250,6 +266,23 @@ const STUB = {
         pendapatan: 0,
         balik_modal: false,
       },
+      // Arsip: hanya muncul di balik toggle "Tampilkan arsip".
+      {
+        id: 4,
+        nama: "Intercom Lama",
+        harga_beli: 2_000_000,
+        tarif_event: 200_000,
+        is_active: 0,
+        modal: 2_000_000,
+        pendapatan: 3_000_000,
+        balik_modal: true,
+      },
+    ],
+  },
+  "/api/alat/1/servis": {
+    servis: [
+      { id: 1, alat_id: 1, tanggal: "2026-09-01", keterangan: "Ganti kabel SDI", biaya: 2_000_000 },
+      { id: 2, alat_id: 1, tanggal: "2026-08-10", keterangan: "Servis lensa", biaya: 500_000 },
     ],
   },
   "/api/paket": {
@@ -495,6 +528,21 @@ const STUB = {
 
 const server = createServer((req, res) => {
   const urlPath = decodeURIComponent(req.url.split("?")[0]);
+  // Write-stub (redesign #59, Alat saja): arsip PATCH dicatat supaya assert
+  // bisa memastikan flag is_active terkirim — aksi arsip tak no-op sunyi.
+  // Write non-GET lain sengaja dibiarkan jatuh ke fallback 404 lama (dist/
+  // statis tanpa API) — fallback blanket mengubah assert terbitkan invoice.
+  if (req.method !== "GET" && urlPath.startsWith("/api/alat")) {
+    if (req.method === "PATCH" && /^\/api\/alat\/\d+$/.test(urlPath)) {
+      writes.push({ path: urlPath });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    res.writeHead(201, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ id: 99 }));
+    return;
+  }
   if (STUB[urlPath]) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(STUB[urlPath]));
@@ -516,6 +564,7 @@ const browser = await chromium.launch({
   executablePath: CHROME,
   args: ["--no-sandbox"],
 });
+const writes = []; // arsip PATCH dicatat di handler server (assert #59)
 let failures = 0;
 const fail = (msg) => {
   failures++;
@@ -672,6 +721,135 @@ for (const [label, w, h] of [
     await go("RAB", "RAB-2026-0001");
     await go("Transaksi", "Drone Bandar Baru");
 
+    // --- Alat cards + servis lapis-dua + arsip toggle (redesign 06, #59) ---
+    // Kartu deskriptif (bukan tabel); tambah di balik +; badge 3-warna;
+    // arsip confirm beda-bobot; arsip default-sembunyi di balik toggle.
+    await navRab("Alat", "Sony NXR-100");
+    const alatView = page.locator('[data-view="alat"]');
+    // Judul kiri + aksi kanan (Q5); form tambah tersembunyi sampai + diklik.
+    if ((await alatView.locator("[data-alat-form]").count()) !== 0)
+      fail(`${label} alat: form tambah harus tersembunyi sebelum + diklik`);
+    await alatView.locator("[data-alat-toggle]").click();
+    await page.waitForTimeout(200);
+    if ((await alatView.locator("[data-alat-form]").count()) === 1){
+      // HP tumpuk penuh (Q24): semua field lebar penuh viewport konten.
+      if (!isDesktop) {
+        const namaW = await alatView
+          .locator("[data-alat-form] input[name=nama]")
+          .evaluate((el) => el.getBoundingClientRect().width);
+        const formW = await alatView
+          .locator("[data-alat-form]")
+          .evaluate((el) => el.getBoundingClientRect().width);
+        if (namaW < formW * 0.8)
+          fail(`${label} alat form mobile: field tidak tumpuk penuh (${namaW}/${formW})`);
+      }
+      await alatView.locator("[data-alat-toggle]").click(); // tutup lagi
+      ok(`${label} alat tambah di balik + (form tersembunyi default)`);
+    } else 
+      fail(`${label} alat: form tambah tak terbuka di balik +`);
+
+    // 3 kartu aktif (arsip ke-4 default-sembunyi), bukan tabel.
+    if ((await alatView.locator("table").count()) !== 0)
+      fail(`${label} alat: view harus kartu, bukan tabel`);
+    if ((await alatView.locator("[data-alat-card]").count()) !== 3)
+      fail(`${label} alat: expected 3 kartu aktif (arsip sembunyi)`);
+    // Badge 3-warna: hijau balik modal; kuning kurang ≤3 event; merah jauh.
+    {
+      const badgeOf = (id) =>
+        alatView.locator(`[data-alat-card][data-alat-id="${id}"] [data-balik-modal-badge]`);
+      const b1 = (await badgeOf(1).getAttribute("class")) ?? "";
+      const b2 = await badgeOf(2).textContent();
+      const b2c = (await badgeOf(2).getAttribute("class")) ?? "";
+      const b3 = await badgeOf(3).textContent();
+      const b3c = (await badgeOf(3).getAttribute("class")) ?? "";
+      if (
+        b1.includes("bg-forest-teal") &&
+        (b1.includes("text-bone-white")) &&
+        b2c.includes("bg-signal-yellow") &&
+        (b2 ?? "").includes("Kurang 2 event") &&
+        b3c.includes("bg-magenta-bloom") &&
+        (b3 ?? "").includes("Belum balik modal")
+      )
+        ok(`${label} alat badge 3-warna (hijau/kuning ≤3 event/merah)`);
+      else
+        fail(`${label} alat badge: ${b1} | ${b2} [${b2c}] | ${b3} [${b3c}]`);
+    }
+
+    // Arsip default-sembunyi; toggle menampilkan + menyembunyikan lagi.
+    {
+      const alatTxt = () => alatView.textContent();
+      if (((await alatTxt()) ?? "").includes("Intercom Lama"))
+        fail(`${label} alat arsip: harus default-sembunyi`);
+      else {
+        await alatView.locator("[data-arsip-toggle]").first().click();
+        await page.waitForTimeout(200);
+        const tampil = ((await alatTxt()) ?? "").includes("Intercom Lama");
+        await alatView.locator("[data-arsip-toggle]").first().click();
+        await page.waitForTimeout(200);
+        const sembunyi = !((await alatTxt()) ?? "").includes("Intercom Lama");
+        if (tampil && sembunyi)
+          ok(`${label} alat arsip toggle default-sembunyi`);
+        else fail(`${label} alat arsip toggle: tampil=${tampil} sembunyi=${sembunyi}`);
+      }
+    }
+
+    // Expand servis: riwayat muncul; form catat = lapis-dua di balik tombol.
+    await alatView
+      .locator('[data-alat-card][data-alat-id="1"] [data-alat-servis-toggle]')
+      .click();
+    await page.waitForTimeout(350);
+    {
+      const exp = (await alatView.textContent()) ?? "";
+      if (
+        !exp.includes("Riwayat servis") ||
+        !exp.includes("Ganti kabel SDI") ||
+        !exp.includes("Rp 2.000.000")
+      )
+        fail(`${label} alat servis expand: riwayat hilang`);
+      else if ((await alatView.locator("[data-servis-form]").count()) === 0){
+        await alatView.locator("[data-servis-form-toggle]").click();
+        await page.waitForTimeout(200);
+        if ((await alatView.locator("[data-servis-form]").count()) === 1)
+          ok(`${label} alat servis riwayat + form lapis-dua`);
+        else fail(`${label} alat servis: form lapis-dua tak terbuka`);
+      } else 
+        fail(`${label} alat servis: form harus lapis-dua (sembunyi default)`);
+    }
+
+    // Arsip selalu confirm + beda-bobot (3 kalimat: arsip → riwayat aman →
+    // cara aktifkan lagi). Tolak dulu — kartu bertahan, tanpa request.
+    {
+      let dialogPesan = "";
+      page.once("dialog", async (d) => {
+        dialogPesan = d.message();
+        await d.dismiss();
+      });
+      await alatView
+        .locator('[data-alat-card][data-alat-id="1"] [data-alat-arsip]')
+        .click();
+      await page.waitForTimeout(250);
+      const masihAda =
+        (await alatView
+          .locator('[data-alat-card][data-alat-id="1"]')
+          .count()) === 1;
+      const bedaBobot =
+        dialogPesan.includes("Riwayat servis, modal, dan pendapatan tetap tersimpan") &&
+        dialogPesan.includes("Tampilkan arsip");
+      if (masihAda && bedaBobot)
+        ok(`${label} alat arsip confirm beda-bobot (tolak = kartu bertahan)`);
+      else
+        fail(`${label} alat arsip confirm: ada=${masihAda} pesan="${dialogPesan.slice(0, 80)}"`);
+      // Terima: PATCH is_active terkirim (assert via write-stub).
+      page.once("dialog", async (d) => d.accept());
+      await alatView
+        .locator('[data-alat-card][data-alat-id="1"] [data-alat-arsip]')
+        .click();
+      await page.waitForTimeout(350);
+      if (writes.some((w) => w.path === "/api/alat/1"))
+        ok(`${label} alat arsip terkirim via PATCH (flag, tanpa hapus)`);
+      else fail(`${label} alat arsip: PATCH /api/alat/1 tak tercatat`);
+    }
+
     // --- Ringkasan 4 kartu klik-lompat (redesign 05, #58) ---
     // Kembali ke Ringkasan: semua kartu/item/baris melompat ke view target
     // dengan filter terpasang + expand sesuai mapping spec.
@@ -696,38 +874,45 @@ for (const [label, w, h] of [
     // Perhatian: overdue dulu (chip merah) lalu belum-lunas lain, tanpa duplikat.
     const perhatianItems = ring.locator("[data-perhatian-item]");
     if ((await perhatianItems.count()) !== 2)
-      fail(`${label} ringkasan perhatian: expected 2 item, got ${await perhatianItems.count()}`);
+      fail(
+        `${label} ringkasan perhatian: expected 2 item, got ${await perhatianItems.count()}`,
+      );
     const perhatianFirst = (await perhatianItems.first().textContent()) ?? "";
-    if (!perhatianFirst.includes("INV-2026-0002") || !perhatianFirst.includes("overdue"))
+    if (
+      !perhatianFirst.includes("INV-2026-0002") ||
+      !perhatianFirst.includes("overdue")
+    )
       fail(`${label} ringkasan perhatian: overdue harus di atas + chip merah`);
     else ok(`${label} ringkasan perhatian overdue-first + chip`);
 
     // Klik kartu Job aktif → Transaksi prefilter terjadwal (1 baris stub).
     await ring.locator("[data-card-job]").click();
     await page.waitForTimeout(500);
-    if (page.url().split("#")[1] !== "/transaksi")
-      fail(`${label} kartu job: hash is ${page.url()}`);
-    else {
-      const txRows = await page.locator('[data-view="transaksi"] table tbody tr').count();
+    if (page.url().split("#")[1] === "/transaksi"){
+      const txRows = await page
+        .locator('[data-view="transaksi"] table tbody tr')
+        .count();
       const txSel = await page.locator("[data-tx-status]").inputValue();
       if (txSel === "terjadwal" && txRows === 1)
         ok(`${label} kartu job → Transaksi prefilter terjadwal (1 baris)`);
       else fail(`${label} kartu job: filter ${txSel}, rows ${txRows}`);
-    }
+    } else 
+      fail(`${label} kartu job: hash is ${page.url()}`);
 
     // Klik kartu Outstanding → Invoice prefilter unpaid (1 baris: INV-...-0002).
     await navRab("Ringkasan", "Perlu perhatian");
     await ring.locator("[data-card-piutang]").click();
     await page.waitForTimeout(500);
-    if (page.url().split("#")[1] !== "/invoice")
-      fail(`${label} kartu piutang: hash is ${page.url()}`);
-    else {
-      const invRows = await page.locator('[data-view="invoice"] table tbody tr').count();
+    if (page.url().split("#")[1] === "/invoice"){
+      const invRows = await page
+        .locator('[data-view="invoice"] table tbody tr')
+        .count();
       const invSel = await page.locator("[data-inv-status]").inputValue();
       if (invSel === "unpaid" && invRows === 1)
         ok(`${label} kartu piutang → Invoice prefilter unpaid (1 baris)`);
       else fail(`${label} kartu piutang: filter ${invSel}, rows ${invRows}`);
-    }
+    } else 
+      fail(`${label} kartu piutang: hash is ${page.url()}`);
 
     // Klik item perhatian overdue → Invoice filter overdue + item ter-expand
     // (pengecualian reset-expand Q25).
@@ -735,7 +920,8 @@ for (const [label, w, h] of [
     await ring.locator("[data-perhatian-item]").first().click();
     await page.waitForTimeout(600);
     {
-      const invTxt = (await page.locator('[data-view="invoice"]').textContent()) ?? "";
+      const invTxt =
+        (await page.locator('[data-view="invoice"]').textContent()) ?? "";
       const invSel = await page.locator("[data-inv-status]").inputValue();
       if (
         page.url().split("#")[1] === "/invoice" &&
@@ -744,7 +930,8 @@ for (const [label, w, h] of [
         invTxt.includes("INV-2026-0002")
       )
         ok(`${label} item perhatian → Invoice overdue + expand itemnya`);
-      else fail(`${label} item perhatian: hash ${page.url()}, filter ${invSel}`);
+      else
+        fail(`${label} item perhatian: hash ${page.url()}, filter ${invSel}`);
     }
 
     // Klik recent → Transaksi + barisnya ter-expand.
@@ -752,7 +939,8 @@ for (const [label, w, h] of [
     await ring.locator("[data-recent-item]").first().click();
     await page.waitForTimeout(600);
     {
-      const txTxt = (await page.locator('[data-view="transaksi"]').textContent()) ?? "";
+      const txTxt =
+        (await page.locator('[data-view="transaksi"]').textContent()) ?? "";
       if (
         page.url().split("#")[1] === "/transaksi" &&
         txTxt.includes("subtotal") &&
@@ -766,7 +954,8 @@ for (const [label, w, h] of [
     await navRab("Ringkasan", "Perlu perhatian");
     await ring.locator("[data-card-kas]").click();
     await page.waitForTimeout(500);
-    if (page.url().split("#")[1] === "/invoice") ok(`${label} kartu kas → Invoice`);
+    if (page.url().split("#")[1] === "/invoice")
+      ok(`${label} kartu kas → Invoice`);
     else fail(`${label} kartu kas: hash ${page.url()}`);
     await navRab("Ringkasan", "Perlu perhatian");
     await ring.locator("[data-card-alat]").click();
@@ -776,8 +965,12 @@ for (const [label, w, h] of [
 
     // Badge sidebar konsisten dengan angka Ringkasan: job_aktif 2 = badge
     // Transaksi 2; 0 = badge hilang (ditutup stub belum-lunas ≠ 0 di sini).
-    const ringBadge = await page.locator("[data-badge-transaksi]").first().textContent();
-    if (ringBadge === "2") ok(`${label} badge Transaksi konsisten dgn job_aktif`);
+    const ringBadge = await page
+      .locator("[data-badge-transaksi]")
+      .first()
+      .textContent();
+    if (ringBadge === "2")
+      ok(`${label} badge Transaksi konsisten dgn job_aktif`);
     else fail(`${label} badge Transaksi: expected 2, got ${ringBadge}`);
 
     // Bersihkan prefilter sisa lompat agar blok tabel Transaksi di bawah

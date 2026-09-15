@@ -1,7 +1,6 @@
 <script>
-  // DashboardApp: ticket #41 = Alat, #42 = Paket (read), #43 = RAB
-  // (list + buat dari paket + status + setujui 1 klik + print).
-  // Full multi-view shell lands in #46.
+  // DashboardApp: shell #54, tabel Transaksi #55 / RAB #56 / Invoice #57,
+  // Ringkasan #58, Alat cards + servis lapis-dua + arsip toggle #59.
   import { onMount } from 'svelte';
 
   let me = $state(null);
@@ -22,6 +21,45 @@
   let svTanggal = $state('');
   let svKeterangan = $state('');
   let svBiaya = $state('');
+
+  // --- Redesign 06 (#59): Alat cards — tambah di balik +, servis lapis-dua,
+  // arsip confirm beda-bobot, arsip toggle default-sembunyi. Tanpa tabel:
+  // list sedikit + deskriptif (Q27). Modal tetap turunan (G2), pendapatan
+  // cuma baris jenis=alat (Q13), tanpa hapus fisik (B4).
+  let alatBuilderOpen = $state(false);
+  let servisFormId = $state(null); // form catat = lapis-dua di dalam expand
+  let showArsip = $state(false); // arsip default-sembunyi (Q27)
+
+  // Arsip paling bawah (Q27): yang masih dipakai tak tenggelam di bawah arsip.
+  const alatAktif = $derived(alat.filter((a) => a.is_active));
+  const alatArsip = $derived(alat.filter((a) => !a.is_active));
+
+  // Sisa event menuju balik modal pada tarif sekarang — teks badge + tier.
+  const eventKurang = (a) =>
+    a.tarif_event > 0 ? Math.max(0, Math.ceil((a.modal - a.pendapatan) / a.tarif_event)) : null;
+
+  // Badge Balik modal 3-warna (Q11/Q16): hijau balik modal; kuning tinggal
+  // ≤3 event (hampir); merah selebihnya / belum ada pendapatan. Teks selalu
+  // menyertai warna (jumlah event pasti saat tarif > 0).
+  const balikModalBadge = (a) => {
+    if (a.balik_modal) return { cls: 'bg-forest-teal text-bone-white', text: 'Balik modal' };
+    const kurang = eventKurang(a);
+    if (kurang !== null && kurang <= 3) return { cls: 'bg-signal-yellow text-ink-black', text: `Kurang ${kurang} event` };
+    return {
+      cls: 'bg-magenta-bloom text-bone-white',
+      text: kurang !== null ? `Belum balik modal · kurang ${kurang} event` : 'Belum balik modal',
+    };
+  };
+
+  // Tombol + membuka form tambah pendek; tutup = buang isian.
+  function bukaAlatBuilder() {
+    alatBuilderOpen = !alatBuilderOpen;
+    if (!alatBuilderOpen) {
+      nama = '';
+      hargaBeli = '';
+      tarifEvent = '';
+    }
+  }
 
   // Per-paket expandable rows (#42: read-only rows + subtotals).
   let openPaketId = $state(null);
@@ -144,21 +182,37 @@
       nama = '';
       hargaBeli = '';
       tarifEvent = '';
+      alatBuilderOpen = false;
       await load();
     } finally {
       busy = false;
     }
   }
 
+  // Arsip = satu-satunya aksi Alat yang selalu confirm (Q45), dan confirm-nya
+  // beda-bobot dari aksi lain: tiga kalimat berurutan (arsip → riwayat aman →
+  // cara mengaktifkan lagi), bukan satu kalimat. Tanpa hapus fisik (B4).
   async function arsipkan(a) {
-    if (!confirm(`Arsipkan ${a.nama}? Riwayat tetap tersimpan.`)) return;
+    if (!confirm(`Arsipkan ${a.nama}? Kartu pindah ke daftar arsip (default tersembunyi).\n\nRiwayat servis, modal, dan pendapatan tetap tersimpan — tidak ada yang dihapus.\n\nAktifkan lagi kapan saja lewat toggle “Tampilkan arsip”.`)) return;
     const { res, data } = await api(`/api/alat/${a.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ is_active: false }),
     });
     if (!res.ok) error = data.error ?? 'Gagal mengarsipkan.';
     else {
-      notice = `${a.nama} diarsipkan.`;
+      notice = `${a.nama} diarsipkan — aktifkan lagi lewat toggle “Tampilkan arsip”.`;
+      await load();
+    }
+  }
+
+  async function aktifkan(a) {
+    const { res, data } = await api(`/api/alat/${a.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: true }),
+    });
+    if (!res.ok) error = data.error ?? 'Gagal mengaktifkan kembali.';
+    else {
+      notice = `${a.nama} aktif kembali.`;
       await load();
     }
   }
@@ -166,14 +220,29 @@
   async function toggle(a) {
     if (openId === a.id) {
       openId = null;
+      servisFormId = null;
       return;
     }
     openId = a.id;
+    servisFormId = null;
     svTanggal = '';
     svKeterangan = '';
     svBiaya = '';
     const { res, data } = await api(`/api/alat/${a.id}/servis`);
     servisRows = res.ok ? data.servis : [];
+  }
+
+  // Form catat = lapis-dua di dalam expand (Q18): riwayat dulu, form di balik
+  // tombol. Buka = isi tanggal hari ini; tutup = buang isian.
+  function bukaServisForm(a) {
+    if (servisFormId === a.id) {
+      servisFormId = null;
+      return;
+    }
+    servisFormId = a.id;
+    svTanggal = new Date().toISOString().slice(0, 10);
+    svKeterangan = '';
+    svBiaya = '';
   }
 
   async function addServis(a, e) {
@@ -194,6 +263,7 @@
     notice = `Servis ${rupiah(data.biaya)} tercatat. Modal ${a.nama} bertambah.`;
     await load();
     servisRows = [...servisRows, data];
+    servisFormId = null;
   }
 
   async function logout() {
@@ -815,6 +885,11 @@
     }
     if (v !== 'rab') openRabId = null;
     if (v !== 'invoice') openInvoiceId = null;
+    // Expand + lapis-dua Alat ikut reset (Q25); toggle arsip sesi tetap.
+    if (v !== 'alat') {
+      openId = null;
+      servisFormId = null;
+    }
     if (lompatExpand) {
       const { target, id } = lompatExpand;
       lompatExpand = null;
@@ -1151,6 +1226,70 @@
   {/if}
 {/snippet}
 
+{#snippet alatCard(a)}
+  {@const badge = balikModalBadge(a)}
+  <li class="border border-ash bg-bone-white p-4 {a.is_active ? '' : 'opacity-75'}" data-alat-card data-alat-id={a.id}>
+    <div class="flex flex-wrap items-baseline justify-between gap-2">
+      <p class="text-body font-normal">
+        {a.nama}
+        {#if !a.is_active}<span class="ml-2 text-caption text-graphite uppercase">Arsip</span>{/if}
+      </p>
+      <!-- Badge Balik modal 3-warna: hijau / kuning ≤3 event / merah. -->
+      <span class="rounded-pill px-3 py-1 text-caption {badge.cls}" data-balik-modal-badge>{badge.text}</span>
+    </div>
+    <p class="mt-2 text-body-sm text-graphite">
+      Modal {rupiah(a.modal)} · Pendapatan {rupiah(a.pendapatan)} · Tarif {rupiah(a.tarif_event)}/event
+    </p>
+    <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
+      <button class="underline" onclick={() => toggle(a)} data-alat-servis-toggle>
+        {openId === a.id ? 'Tutup servis' : 'Servis & riwayat'}
+      </button>
+      {#if a.is_active}
+        <button class="underline" onclick={() => arsipkan(a)} data-alat-arsip>Arsipkan</button>
+      {:else}
+        <button class="underline" onclick={() => aktifkan(a)} data-alat-aktifkan>Aktifkan kembali</button>
+      {/if}
+    </div>
+    {#if openId === a.id}
+      <div class="mt-4 border-t border-ash pt-4" data-alat-servis>
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <p class="text-caption uppercase text-graphite">Riwayat servis — menambah Modal</p>
+          <!-- Form catat = lapis-dua di dalam expand (Q18). -->
+          <button class="underline text-body-sm" onclick={() => bukaServisForm(a)} data-servis-form-toggle>
+            {servisFormId === a.id ? 'Tutup form' : '+ Catat servis'}
+          </button>
+        </div>
+        {#if !servisRows.length}
+          <p class="mt-2 text-body-sm text-graphite">Belum ada servis tercatat.</p>
+        {:else}
+          <ul class="mt-2 grid gap-2 text-body-sm">
+            {#each servisRows as s (s.id)}
+              <li class="flex justify-between gap-2"><span>{tgl(s.tanggal)} — {s.keterangan || '(tanpa keterangan)'}</span><span>{rupiah(s.biaya)}</span></li>
+            {/each}
+          </ul>
+        {/if}
+        {#if servisFormId === a.id}
+          <form class="mt-4 grid gap-3 border-t border-ash pt-4 max-md:grid-cols-1 md:grid-cols-[1fr_2fr_1fr_auto] md:items-end" onsubmit={(e) => addServis(a, e)} data-servis-form>
+            <label class="grid gap-1 text-body-sm">
+              Tanggal
+              <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="date" required bind:value={svTanggal} />
+            </label>
+            <label class="grid gap-1 text-body-sm">
+              Keterangan
+              <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={svKeterangan} placeholder="Ganti kabel" />
+            </label>
+            <label class="grid gap-1 text-body-sm">
+              Biaya (Rp)
+              <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="0" step="1" required bind:value={svBiaya} />
+            </label>
+            <button class="rounded-pill bg-navy-ink px-5 py-3 text-body-sm text-bone-white max-md:w-full" type="submit">Catat</button>
+          </form>
+        {/if}
+      </div>
+    {/if}
+  </li>
+{/snippet}
+
 {#snippet navItem(v, label)}
   <button
     class="flex w-full items-center justify-between gap-2 rounded-none px-4 py-2.5 text-left text-body-sm {view === v ? 'bg-navy-ink text-bone-white' : 'text-ink-black hover:bg-canvas'}"
@@ -1223,88 +1362,64 @@
   <main class="px-(--pad) py-6">
 
     {#if view === 'alat'}
-    <section class="mt-8">
-      <h2 class="text-subheading font-normal">Tambah alat</h2>
-      <form class="mt-4 grid gap-4 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end" onsubmit={addAlat}>
+    <!-- Alat (#59): kartu deskriptif (bukan tabel — list sedikit), tambah di
+         balik +, servis lapis-dua di dalam expand, arsip confirm beda-bobot
+         + toggle default-sembunyi. HP: semua field tumpuk penuh (Q24). -->
+    <section class="mt-8" data-view="alat">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-subheading font-normal">Alat</h2>
+        <button class="rounded-pill bg-navy-ink px-5 py-3 text-body-sm text-bone-white" onclick={bukaAlatBuilder} data-alat-toggle>
+          {alatBuilderOpen ? 'Tutup' : '+ Alat baru'}
+        </button>
+      </div>
+
+      {#if alatBuilderOpen}
+      <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end" onsubmit={addAlat} data-alat-form>
         <label class="grid gap-1 text-body-sm">
           Nama
-          <input class="rounded-none border border-ash bg-bone-white px-4 py-3 text-body" name="nama" required bind:value={nama} placeholder="Sony NXR-100" />
+          <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="nama" required bind:value={nama} placeholder="Sony NXR-100" />
         </label>
         <label class="grid gap-1 text-body-sm">
           Harga beli (Rp)
-          <input class="rounded-none border border-ash bg-bone-white px-4 py-3 text-body" name="harga_beli" type="number" min="0" step="1" required bind:value={hargaBeli} placeholder="10000000" />
+          <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="harga_beli" type="number" min="0" step="1" required bind:value={hargaBeli} placeholder="10000000" />
         </label>
         <label class="grid gap-1 text-body-sm">
           Tarif/event (Rp)
-          <input class="rounded-none border border-ash bg-bone-white px-4 py-3 text-body" name="tarif_event" type="number" min="0" step="1" required bind:value={tarifEvent} placeholder="350000" />
+          <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="tarif_event" type="number" min="0" step="1" required bind:value={tarifEvent} placeholder="350000" />
         </label>
-        <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white disabled:opacity-50" type="submit" disabled={busy}>
+        <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white disabled:opacity-50 max-md:w-full" type="submit" disabled={busy}>
           {busy ? '…' : 'Tambah'}
         </button>
       </form>
-    </section>
+      {/if}
 
-    <section class="mt-12">
-      <h2 class="text-subheading font-normal">Daftar alat</h2>
       {#if !alat.length}
-        <p class="mt-4 text-body-sm text-graphite">Belum ada alat. Tambahkan alat pertamamu di atas.</p>
+        <!-- Empty state: satu baris + CTA (Q34). -->
+        <p class="mt-4 text-body-sm text-graphite">Belum ada alat. Tambahkan lewat tombol “+ Alat baru” di atas.</p>
+      {:else if !alatAktif.length}
+        <p class="mt-4 text-body-sm text-graphite">Semua alat terarsip. <button class="underline" onclick={() => (showArsip = true)} data-arsip-toggle>Tampilkan arsip</button></p>
       {:else}
         <ul class="mt-4 grid gap-4">
-          {#each alat as a (a.id)}
-            <li class="border border-ash bg-bone-white p-4">
-              <div class="flex flex-wrap items-baseline justify-between gap-2">
-                <p class="text-body font-normal">
-                  {a.nama}
-                  {#if !a.is_active}<span class="ml-2 text-caption text-graphite uppercase">Arsip</span>{/if}
-                </p>
-                {#if a.balik_modal}
-                  <span class="rounded-pill bg-forest-teal px-3 py-1 text-caption text-bone-white">Balik modal</span>
-                {:else}
-                  <span class="rounded-pill border border-ash px-3 py-1 text-caption text-graphite">Belum balik modal</span>
-                {/if}
-              </div>
-              <p class="mt-2 text-body-sm text-graphite">
-                Modal {rupiah(a.modal)} · Pendapatan {rupiah(a.pendapatan)} · Tarif {rupiah(a.tarif_event)}/event
-              </p>
-              <div class="mt-3 flex gap-4 text-body-sm">
-                <button class="underline" onclick={() => toggle(a)}>
-                  {openId === a.id ? 'Tutup servis' : 'Servis & riwayat'}
-                </button>
-                {#if a.is_active}
-                  <button class="underline" onclick={() => arsipkan(a)}>Arsipkan</button>
-                {/if}
-              </div>
-              {#if openId === a.id}
-                <div class="mt-4 border-t border-ash pt-4">
-                  {#if !servisRows.length}
-                    <p class="text-body-sm text-graphite">Belum ada servis tercatat.</p>
-                  {:else}
-                    <ul class="grid gap-2 text-body-sm">
-                      {#each servisRows as s (s.id)}
-                        <li>{tgl(s.tanggal)} — {s.keterangan || '(tanpa keterangan)'} — {rupiah(s.biaya)}</li>
-                      {/each}
-                    </ul>
-                  {/if}
-                  <form class="mt-4 grid gap-3 max-md:grid-cols-1 md:grid-cols-[1fr_2fr_1fr_auto] md:items-end" onsubmit={(e) => addServis(a, e)}>
-                    <label class="grid gap-1 text-body-sm">
-                      Tanggal
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" required bind:value={svTanggal} />
-                    </label>
-                    <label class="grid gap-1 text-body-sm">
-                      Keterangan
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={svKeterangan} placeholder="Ganti kabel" />
-                    </label>
-                    <label class="grid gap-1 text-body-sm">
-                      Biaya (Rp)
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" min="0" step="1" required bind:value={svBiaya} />
-                    </label>
-                    <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white" type="submit">Catat</button>
-                  </form>
-                </div>
-              {/if}
-            </li>
+          {#each alatAktif as a (a.id)}
+            {@render alatCard(a)}
           {/each}
         </ul>
+      {/if}
+
+      {#if alatArsip.length}
+        <!-- Arsip: default-sembunyi (Q27), toggle sesi; tanpa hapus fisik. -->
+        <div class="mt-8 border-t border-ash pt-4">
+          <button class="text-body-sm underline" onclick={() => (showArsip = !showArsip)} data-arsip-toggle>
+            {showArsip ? 'Sembunyikan arsip' : `Tampilkan arsip (${alatArsip.length})`}
+          </button>
+          {#if showArsip}
+            <ul class="mt-4 grid gap-4">
+              {#each alatArsip as a (a.id)}
+                {@render alatCard(a)}
+              {/each}
+            </ul>
+          {/if}
+        </div>
       {/if}
     </section>
     {/if}
