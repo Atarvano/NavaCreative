@@ -797,21 +797,93 @@
   ];
   const VIEW_KEYS = [...NAV.flatMap(([, g]) => g.map(([k]) => k)), 'settings'];
 
+  // Lompat Ringkasan (#58): satu-satunya pengecualian reset-expand (Q25) —
+  // target expand/filter dibawa variabel ini, dipasang SETELAH tampilkan()
+  // selesai mereset. Sekali pakai: tampilkan() mengonsumsinya.
+  // Sengaja BUKAN $state: hanya dibaca imperatif di dalam tampilkan(),
+  // tak pernah dari markup/$derived — jangan dipakai reaktif.
+  let lompatExpand = null;
+
   async function tampilkan(v) {
     if (!VIEW_KEYS.includes(v)) v = 'ringkasan';
     view = v;
-    // Q25: expand reset saat pindah view (lompat Ringkasan #58 = pengecualian).
+    // Q25: expand reset saat pindah view (lompat Ringkasan #58 = pengecualian:
+    // lompatExpand dipasang ulang tepat sesudah reset di bawah).
     if (v !== 'transaksi') {
       openTransaksiId = null;
       briefOpenId = null;
     }
     if (v !== 'rab') openRabId = null;
     if (v !== 'invoice') openInvoiceId = null;
+    if (lompatExpand) {
+      const { target, id } = lompatExpand;
+      lompatExpand = null;
+      if (target === 'invoice' && v === 'invoice') {
+        const inv = invoices.find((x) => x.id === id);
+        if (inv) bukaInvoice(inv);
+      } else if (target === 'transaksi' && v === 'transaksi') {
+        const t = transaksi.find((x) => x.id === id);
+        if (t) bukaTransaksi(t);
+      }
+    }
     if (v === 'ringkasan') {
       const { res, data } = await api('/api/ringkasan');
       if (res.ok) ringkasan = data;
     }
     if (v === 'settings') setForm = { ...settings };
+  }
+
+  // --- Redesign 05 (#58): 4 kartu + perhatian + recent, semua klik-lompat ---
+  // Mapping klik (spec): kas → Invoice; piutang → Invoice prefilter unpaid;
+  // alat → Alat; job aktif → Transaksi prefilter terjadwal; item perhatian →
+  // Invoice terfilter + expand itemnya; recent → expand barisnya di Transaksi.
+  // Perhatian = overdue dulu lalu belum-lunas lain (tanpa clash-math).
+  const perhatian = $derived(
+    ringkasan
+      ? [
+          ...ringkasan.overdue.map((o) => ({ ...o, isOverdue: true })),
+          ...ringkasan.belum_lunas.filter((b) => !ringkasan.overdue.some((o) => o.id === b.id)),
+        ]
+      : [],
+  );
+  const alatBalikModal = $derived(ringkasan ? ringkasan.per_alat.filter((a) => a.balik_modal).length : 0);
+  // Label bulan statis (bukan filter tanggal): "Kas masuk September 2026".
+  // Dirender dari kas_bulan yang dihitung API — bulan label = bulan angka,
+  // tak bisa geser saat tengah malam beda zona worker vs browser.
+  const bulanIni = $derived(
+    ringkasan?.kas_bulan
+      ? new Date(ringkasan.kas_bulan + '-02').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+      : '',
+  );
+
+  function lompatInvoice(filter = 'semua', expandId = null) {
+    invSearch = '';
+    invStatusFilter = filter;
+    if (view === 'invoice') {
+      // Sudah di view target: tak ada hashchange → pasang expand langsung.
+      const inv = expandId ? invoices.find((x) => x.id === expandId) : null;
+      if (inv) bukaInvoice(inv);
+      else openInvoiceId = null;
+      return;
+    }
+    lompatExpand = expandId ? { target: 'invoice', id: expandId } : null;
+    go('invoice');
+  }
+
+  function lompatTransaksi(filter = 'semua', expandId = null) {
+    txSearch = '';
+    txStatusFilter = filter;
+    if (view === 'transaksi') {
+      const t = expandId ? transaksi.find((x) => x.id === expandId) : null;
+      if (t) bukaTransaksi(t);
+      else {
+        openTransaksiId = null;
+        briefOpenId = null;
+      }
+      return;
+    }
+    lompatExpand = expandId ? { target: 'transaksi', id: expandId } : null;
+    go('transaksi');
   }
 
   function go(v) {
@@ -1522,45 +1594,69 @@
     </section>
     {/if}
     {#if view === 'ringkasan'}
-    <section class="mt-8">
+    <!-- Ringkasan (#58): pintu masuk kerja harian — 4 kartu klik-lompat →
+         Perlu perhatian → Transaksi terbaru. Semua kartu/item/baris bisa
+         diklik sesuai mapping spec. -->
+    <section class="mt-8" data-view="ringkasan">
       <h2 class="text-subheading font-normal">Ringkasan</h2>
       {#if !ringkasan}
         <p class="mt-4 text-body-sm text-graphite">Memuat…</p>
       {:else}
-        <div class="mt-4 grid gap-4 max-md:grid-cols-1 md:grid-cols-3">
-          <div class="border border-ash bg-bone-white p-4"><p class="text-caption text-graphite uppercase">Total modal</p><p class="text-subheading font-normal">{rupiah(ringkasan.total_modal)}</p></div>
-          <div class="border border-ash bg-bone-white p-4"><p class="text-caption text-graphite uppercase">Total pendapatan</p><p class="text-subheading font-normal">{rupiah(ringkasan.total_pendapatan)}</p></div>
-          <div class="border border-ash bg-bone-white p-4"><p class="text-caption text-graphite uppercase">Piutang</p><p class="text-subheading font-normal">{rupiah(ringkasan.piutang)}</p></div>
+        <div class="mt-4 grid gap-4 grid-cols-2 lg:grid-cols-4">
+          <!-- Label bulan statis (bukan filter tanggal). Klik → Invoice. -->
+          <button class="border border-ash bg-bone-white p-4 text-left" onclick={() => lompatInvoice()} data-card-kas>
+            <p class="text-caption text-graphite uppercase">Kas masuk {bulanIni}</p>
+            <p class="text-subheading font-normal">{rupiah(ringkasan.kas_bulan_ini)}</p>
+          </button>
+          <button class="border border-ash bg-bone-white p-4 text-left" onclick={() => lompatInvoice('unpaid')} data-card-piutang>
+            <p class="text-caption text-graphite uppercase">Outstanding</p>
+            <p class="text-subheading font-normal">{rupiah(ringkasan.piutang)}</p>
+          </button>
+          <button class="border border-ash bg-bone-white p-4 text-left" onclick={() => go('alat')} data-card-alat>
+            <p class="text-caption text-graphite uppercase">Alat balik modal</p>
+            <p class="text-subheading font-normal">{alatBalikModal}/{ringkasan.per_alat.length}</p>
+          </button>
+          <button class="border border-ash bg-bone-white p-4 text-left" onclick={() => lompatTransaksi('terjadwal')} data-card-job>
+            <p class="text-caption text-graphite uppercase">Job aktif</p>
+            <p class="text-subheading font-normal">{ringkasan.job_aktif}</p>
+          </button>
         </div>
-        <h3 class="mt-8 text-body font-normal">Balik modal per alat</h3>
-        <ul class="mt-2 grid gap-2">
-          {#each ringkasan.per_alat as a (a.id)}
-            <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{a.nama}</span><span>{a.balik_modal ? 'Balik modal' : `${rupiah(a.pendapatan)} / ${rupiah(a.modal)}`}</span></li>
-          {/each}
-        </ul>
-        {#if ringkasan.belum_lunas.length}
-          <h3 class="mt-8 text-body font-normal">Belum lunas</h3>
+
+        <!-- Perlu perhatian (Q7): overdue + belum-lunas saja, tanpa
+             clash-math. Semua-lunas = pesan all-clear eksplisit (Q9). -->
+        <h3 class="mt-8 text-body font-normal">Perlu perhatian</h3>
+        {#if perhatian.length}
           <ul class="mt-2 grid gap-2">
-            {#each ringkasan.belum_lunas as b (b.id)}
-              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{b.nomor} · tempo {tgl(b.jatuh_tempo)}</span><span>{rupiah(b.sisa)}</span></li>
+            {#each perhatian as b (b.id)}
+              <li>
+                <button class="flex w-full justify-between gap-2 border border-ash bg-bone-white p-3 text-left text-body-sm" onclick={() => lompatInvoice(b.isOverdue ? 'overdue' : 'unpaid', b.id)} data-perhatian-item>
+                  <span>
+                    {b.nomor} · tempo {tgl(b.jatuh_tempo)}
+                    {#if b.isOverdue}<span class="ml-2 rounded-pill bg-magenta-bloom px-2 py-0.5 text-caption text-bone-white">overdue</span>{/if}
+                  </span>
+                  <span>{rupiah(b.sisa)}</span>
+                </button>
+              </li>
             {/each}
           </ul>
+        {:else}
+          <p class="mt-2 border border-ash bg-bone-white p-3 text-body-sm text-graphite" data-all-clear>Semua invoice lunas — tidak ada yang perlu perhatian.</p>
         {/if}
-        {#if ringkasan.overdue.length}
-          <h3 class="mt-8 text-body font-normal">Overdue</h3>
-          <ul class="mt-2 grid gap-2">
-            {#each ringkasan.overdue as b (b.id)}
-              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{b.nomor} · tempo {tgl(b.jatuh_tempo)}</span><span>{rupiah(b.sisa)}</span></li>
-            {/each}
-          </ul>
-        {/if}
+
+        <h3 class="mt-8 text-body font-normal">Transaksi terbaru</h3>
         {#if ringkasan.recent.length}
-          <h3 class="mt-8 text-body font-normal">Transaksi terbaru</h3>
           <ul class="mt-2 grid gap-2">
             {#each ringkasan.recent as t (t.id)}
-              <li class="flex justify-between gap-2 border border-ash bg-bone-white p-3 text-body-sm"><span>{t.nama_project} · {t.nama_client}</span><span>{rupiah(t.total)}</span></li>
+              <li>
+                <button class="flex w-full justify-between gap-2 border border-ash bg-bone-white p-3 text-left text-body-sm" onclick={() => lompatTransaksi('semua', t.id)} data-recent-item>
+                  <span>{t.nama_project} · {t.nama_client} <span class="rounded-pill px-2 py-0.5 text-caption {chipCls(t.status)}">{t.status}</span></span>
+                  <span>{rupiah(t.total)}</span>
+                </button>
+              </li>
             {/each}
           </ul>
+        {:else}
+          <p class="mt-2 border border-ash bg-bone-white p-3 text-body-sm text-graphite">Belum ada transaksi. Mulai lewat tombol “+ Walk-in” di Transaksi.</p>
         {/if}
       {/if}
     </section>

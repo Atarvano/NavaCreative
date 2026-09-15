@@ -82,9 +82,20 @@ const STUB = {
     sisa: 3500000,
     overdue: false,
     bayar: [
-      { id: 1, tanggal: "2026-08-18", jumlah: 2000000, metode: "transfer", referensi: "", label: "DP" },
+      {
+        id: 1,
+        tanggal: "2026-08-18",
+        jumlah: 2000000,
+        metode: "transfer",
+        referensi: "",
+        label: "DP",
+      },
     ],
-    transaksi: { id: 1, nama_project: "Drone Bandar Baru", nama_client: "Pak Suhaimi" },
+    transaksi: {
+      id: 1,
+      nama_project: "Drone Bandar Baru",
+      nama_client: "Pak Suhaimi",
+    },
     baris: [],
   },
   "/api/invoice/2": {
@@ -418,7 +429,11 @@ const STUB = {
   "/api/ringkasan": {
     total_modal: 12500000,
     total_pendapatan: 12000000,
-    piutang: 3500000,
+    piutang: 4400000,
+    // #58: field aditif baru — kas bulan ini + job aktif (terjadwal+berjalan).
+    kas_bulan_ini: 2000000,
+    kas_bulan: "2026-09",
+    job_aktif: 2,
     per_alat: [
       {
         id: 1,
@@ -443,9 +458,30 @@ const STUB = {
         jatuh_tempo: "2026-08-24",
         status: "partial",
       },
+      {
+        id: 2,
+        nomor: "INV-2026-0002",
+        sisa: 900000,
+        jatuh_tempo: "2026-08-07",
+        status: "unpaid",
+      },
     ],
-    overdue: [],
+    overdue: [
+      {
+        id: 2,
+        nomor: "INV-2026-0002",
+        sisa: 900000,
+        jatuh_tempo: "2026-08-07",
+      },
+    ],
     recent: [
+      {
+        id: 3,
+        nama_project: "Dokumentasi Wisuda",
+        nama_client: "Kampus ABC",
+        total: 750000,
+        status: "selesai",
+      },
       {
         id: 1,
         nama_project: "Drone Bandar Baru",
@@ -538,31 +574,60 @@ for (const [label, w, h] of [
     const invTable = page.locator('[data-view="invoice"]');
     // Kolom sesuai kontrak: Nomor|Client|Total|Dibayar|Sisa|Tempo|Status|Aksi.
     const invHead = (await invTable.locator("table thead").textContent()) ?? "";
-    for (const col of ["Nomor", "Client", "Total", "Dibayar", "Sisa", "Tempo", "Status", "Aksi"])
-      if (!invHead.includes(col)) fail(`${label} invoice table: kolom ${col} hilang`);
+    for (const col of [
+      "Nomor",
+      "Client",
+      "Total",
+      "Dibayar",
+      "Sisa",
+      "Tempo",
+      "Status",
+      "Aksi",
+    ])
+      if (!invHead.includes(col))
+        fail(`${label} invoice table: kolom ${col} hilang`);
     // Client join sisi-FE dari transaksi induk (INV-...-0001 → Pak Suhaimi).
-    if (!invBody.includes("Pak Suhaimi")) fail(`${label} invoice table: client join hilang`);
+    if (!invBody.includes("Pak Suhaimi"))
+      fail(`${label} invoice table: client join hilang`);
     // Overdue menonjol (Q17): chip merah 'overdue' + sisa bold di baris INV-...-0002.
-    const invOdRow = invTable.locator("table tbody tr", { hasText: "INV-2026-0002" }).first();
+    const invOdRow = invTable
+      .locator("table tbody tr", { hasText: "INV-2026-0002" })
+      .first();
     const invOdText = (await invOdRow.textContent()) ?? "";
-    if (!invOdText.includes("overdue")) fail(`${label} invoice table: chip overdue hilang`);
-    if (!(await invOdRow.locator("td").nth(4).getAttribute("class")).includes("font-medium"))
+    if (!invOdText.includes("overdue"))
+      fail(`${label} invoice table: chip overdue hilang`);
+    if (
+      !(await invOdRow.locator("td").nth(4).getAttribute("class")).includes(
+        "font-medium",
+      )
+    )
       fail(`${label} invoice table: sisa overdue tidak bold`);
     // Bayar cepat primer ada di baris belum-lunas, hilang di baris lunas/batal.
     if ((await invTable.locator("[data-inv-bayar]").count()) !== 2)
-      fail(`${label} invoice table: Bayar cepat harus ada di 2 baris belum-lunas`);
+      fail(
+        `${label} invoice table: Bayar cepat harus ada di 2 baris belum-lunas`,
+      );
     // Filter status 'overdue' menyisakan hanya baris overdue.
     await invTable.locator("[data-inv-status]").selectOption("overdue");
     await page.waitForTimeout(200);
     const invOdRows = await invTable.locator("table tbody tr").count();
-    if (invOdRows !== 1) fail(`${label} invoice filter overdue: expected 1 row, got ${invOdRows}`);
+    if (invOdRows !== 1)
+      fail(`${label} invoice filter overdue: expected 1 row, got ${invOdRows}`);
     await invTable.locator("[data-inv-status]").selectOption("semua");
     await page.waitForTimeout(200);
     // Expand via Rincian: riwayat bayar + form bayar lapis-dua + form tempo muncul.
-    await invTable.locator("table tbody tr", { hasText: "INV-2026-0001" }).first().getByRole("button", { name: "Rincian" }).click();
+    await invTable
+      .locator("table tbody tr", { hasText: "INV-2026-0001" })
+      .first()
+      .getByRole("button", { name: "Rincian" })
+      .click();
     await page.waitForTimeout(350);
     const invExpand = (await invTable.textContent()) ?? "";
-    if (!invExpand.includes("Riwayat pembayaran") || !invExpand.includes("Catat pembayaran") || !invExpand.includes("Jatuh tempo"))
+    if (
+      !invExpand.includes("Riwayat pembayaran") ||
+      !invExpand.includes("Catat pembayaran") ||
+      !invExpand.includes("Jatuh tempo")
+    )
       fail(`${label} invoice expand: riwayat/form bayar/form tempo hilang`);
     else ok(`${label} invoice table + overdue + filter + expand`);
 
@@ -583,11 +648,144 @@ for (const [label, w, h] of [
       if (!body.includes(text))
         fail(`${label} view ${navLabel}: missing ${text}`);
     };
-    await go("Ringkasan", "Rp 12.500.000");
+    // navRab dihoist ke sini (dipakai blok Ringkasan #58 di bawah + blok
+    // RAB/PAKET lebih jauh): navigasi langsung tanpa verifikasi hash-balik.
+    const navRab = async (navLabel, text) => {
+      if (isDesktop)
+        await sidebar.getByRole("button", { name: navLabel }).click();
+      else {
+        await page.locator("button[aria-label='Buka menu']").click();
+        await page.waitForTimeout(250);
+        await page
+          .locator("[data-drawer]")
+          .getByRole("button", { name: navLabel })
+          .click();
+      }
+      await page.waitForTimeout(450);
+      const body = (await page.locator("#app").textContent()) ?? "";
+      if (!body.includes(text))
+        fail(`${label} view ${navLabel}: missing ${text}`);
+    };
+    await go("Ringkasan", "Rp 2.000.000");
     await go("Alat", "Sony NXR-100");
     await go("Paket", "Paket 1 Camera");
     await go("RAB", "RAB-2026-0001");
     await go("Transaksi", "Drone Bandar Baru");
+
+    // --- Ringkasan 4 kartu klik-lompat (redesign 05, #58) ---
+    // Kembali ke Ringkasan: semua kartu/item/baris melompat ke view target
+    // dengan filter terpasang + expand sesuai mapping spec.
+    await navRab("Ringkasan", "Perlu perhatian");
+    const ring = page.locator('[data-view="ringkasan"]');
+    const ringTxt = (await ring.textContent()) ?? "";
+    // 4 kartu: kas bulan ini (label bulan statis), outstanding, alat x/y, job.
+    // Label bulan statis dirender dari kas_bulan API (September 2026),
+    // bukan tanggal browser — jadi bisa diasert deterministik.
+    if (
+      !ringTxt.includes("Kas masuk September 2026") ||
+      !ringTxt.includes("Rp 2.000.000") ||
+      !ringTxt.includes("Outstanding") ||
+      !ringTxt.includes("Rp 4.400.000") ||
+      !ringTxt.includes("Alat balik modal") ||
+      !ringTxt.includes("1/2") ||
+      !ringTxt.includes("Job aktif") ||
+      !ringTxt.includes("2")
+    )
+      fail(`${label} ringkasan: 4 kartu tidak lengkap`);
+    else ok(`${label} ringkasan 4 kartu (kas/outstanding/alat x/y/job)`);
+    // Perhatian: overdue dulu (chip merah) lalu belum-lunas lain, tanpa duplikat.
+    const perhatianItems = ring.locator("[data-perhatian-item]");
+    if ((await perhatianItems.count()) !== 2)
+      fail(`${label} ringkasan perhatian: expected 2 item, got ${await perhatianItems.count()}`);
+    const perhatianFirst = (await perhatianItems.first().textContent()) ?? "";
+    if (!perhatianFirst.includes("INV-2026-0002") || !perhatianFirst.includes("overdue"))
+      fail(`${label} ringkasan perhatian: overdue harus di atas + chip merah`);
+    else ok(`${label} ringkasan perhatian overdue-first + chip`);
+
+    // Klik kartu Job aktif → Transaksi prefilter terjadwal (1 baris stub).
+    await ring.locator("[data-card-job]").click();
+    await page.waitForTimeout(500);
+    if (page.url().split("#")[1] !== "/transaksi")
+      fail(`${label} kartu job: hash is ${page.url()}`);
+    else {
+      const txRows = await page.locator('[data-view="transaksi"] table tbody tr').count();
+      const txSel = await page.locator("[data-tx-status]").inputValue();
+      if (txSel === "terjadwal" && txRows === 1)
+        ok(`${label} kartu job → Transaksi prefilter terjadwal (1 baris)`);
+      else fail(`${label} kartu job: filter ${txSel}, rows ${txRows}`);
+    }
+
+    // Klik kartu Outstanding → Invoice prefilter unpaid (1 baris: INV-...-0002).
+    await navRab("Ringkasan", "Perlu perhatian");
+    await ring.locator("[data-card-piutang]").click();
+    await page.waitForTimeout(500);
+    if (page.url().split("#")[1] !== "/invoice")
+      fail(`${label} kartu piutang: hash is ${page.url()}`);
+    else {
+      const invRows = await page.locator('[data-view="invoice"] table tbody tr').count();
+      const invSel = await page.locator("[data-inv-status]").inputValue();
+      if (invSel === "unpaid" && invRows === 1)
+        ok(`${label} kartu piutang → Invoice prefilter unpaid (1 baris)`);
+      else fail(`${label} kartu piutang: filter ${invSel}, rows ${invRows}`);
+    }
+
+    // Klik item perhatian overdue → Invoice filter overdue + item ter-expand
+    // (pengecualian reset-expand Q25).
+    await navRab("Ringkasan", "Perlu perhatian");
+    await ring.locator("[data-perhatian-item]").first().click();
+    await page.waitForTimeout(600);
+    {
+      const invTxt = (await page.locator('[data-view="invoice"]').textContent()) ?? "";
+      const invSel = await page.locator("[data-inv-status]").inputValue();
+      if (
+        page.url().split("#")[1] === "/invoice" &&
+        invSel === "overdue" &&
+        invTxt.includes("Riwayat pembayaran") &&
+        invTxt.includes("INV-2026-0002")
+      )
+        ok(`${label} item perhatian → Invoice overdue + expand itemnya`);
+      else fail(`${label} item perhatian: hash ${page.url()}, filter ${invSel}`);
+    }
+
+    // Klik recent → Transaksi + barisnya ter-expand.
+    await navRab("Ringkasan", "Perlu perhatian");
+    await ring.locator("[data-recent-item]").first().click();
+    await page.waitForTimeout(600);
+    {
+      const txTxt = (await page.locator('[data-view="transaksi"]').textContent()) ?? "";
+      if (
+        page.url().split("#")[1] === "/transaksi" &&
+        txTxt.includes("subtotal") &&
+        txTxt.includes("Dokumentasi Wisuda")
+      )
+        ok(`${label} recent → Transaksi + expand barisnya`);
+      else fail(`${label} recent: hash ${page.url()}`);
+    }
+
+    // Klik kartu Kas → Invoice tanpa prefilter; kartu Alat → view Alat.
+    await navRab("Ringkasan", "Perlu perhatian");
+    await ring.locator("[data-card-kas]").click();
+    await page.waitForTimeout(500);
+    if (page.url().split("#")[1] === "/invoice") ok(`${label} kartu kas → Invoice`);
+    else fail(`${label} kartu kas: hash ${page.url()}`);
+    await navRab("Ringkasan", "Perlu perhatian");
+    await ring.locator("[data-card-alat]").click();
+    await page.waitForTimeout(500);
+    if (page.url().split("#")[1] === "/alat") ok(`${label} kartu alat → Alat`);
+    else fail(`${label} kartu alat: hash ${page.url()}`);
+
+    // Badge sidebar konsisten dengan angka Ringkasan: job_aktif 2 = badge
+    // Transaksi 2; 0 = badge hilang (ditutup stub belum-lunas ≠ 0 di sini).
+    const ringBadge = await page.locator("[data-badge-transaksi]").first().textContent();
+    if (ringBadge === "2") ok(`${label} badge Transaksi konsisten dgn job_aktif`);
+    else fail(`${label} badge Transaksi: expected 2, got ${ringBadge}`);
+
+    // Bersihkan prefilter sisa lompat agar blok tabel Transaksi di bawah
+    // (yang mengharap 3 baris) mulai dari state netral.
+    await navRab("Transaksi", "Drone Bandar Baru");
+    await page.locator("[data-tx-search]").fill("");
+    await page.locator("[data-tx-status]").selectOption("semua");
+    await page.waitForTimeout(300);
 
     // --- Tabel Transaksi (redesign 02, #55) ---
     const txTable = page.locator('[data-view="transaksi"]');
@@ -730,23 +928,7 @@ for (const [label, w, h] of [
     else fail(`${label} terbitkan: notice missing (${banner})`);
 
     // --- Tabel RAB (redesign 03, #56) ---
-    // Navigasi langsung (desktop: sidebar; mobile: drawer) — go() hanya
-    // memverifikasi, tak mengembalikan hash.
-    const navRab = async (navLabel, text) => {
-      if (isDesktop)
-        await sidebar.getByRole("button", { name: navLabel }).click();
-      else {
-        await page.locator("button[aria-label='Buka menu']").click();
-        await page.waitForTimeout(250);
-        await page
-          .locator("[data-drawer]")
-          .getByRole("button", { name: navLabel })
-          .click();
-      }
-      await page.waitForTimeout(450);
-      const body = (await page.locator("#app").textContent()) ?? "";
-      if (!body.includes(text)) fail(`${label} view ${navLabel}: missing ${text}`);
-    };
+    // navRab sudah dihoist di atas (dipakai blok Ringkasan #58).
     await navRab("RAB", "RAB-2026-0001");
     const rabTable = page.locator('[data-view="rab"]');
     // Judul-kiri + tombol-kanan (Q5): tombol + RAB baru di header.
@@ -755,7 +937,10 @@ for (const [label, w, h] of [
     // 3 baris stub; default urutan API id DESC → terbaru (approved) di atas.
     if ((await rabTable.locator("table tbody tr").count()) !== 3)
       fail(`${label} rab table: expected 3 rows`);
-    const rabFirst = await rabTable.locator("table tbody tr").first().textContent();
+    const rabFirst = await rabTable
+      .locator("table tbody tr")
+      .first()
+      .textContent();
     if (!(rabFirst ?? "").includes("Grand Opening Kafe"))
       fail(`${label} rab table: default order not newest-first`);
     // Aksi primer per status: draft→Kirim, sent→Setujui, approved→kunci (tanpa aksi).
@@ -786,51 +971,83 @@ for (const [label, w, h] of [
     // Sort: klik header Total sekali = desc (3.250.000 terbesar di atas).
     await rabTable.getByRole("button", { name: /Total/ }).click();
     await page.waitForTimeout(300);
-    const rabDesc = await rabTable.locator("table tbody tr").first().textContent();
-    if ((rabDesc ?? "").includes("Rp 3.250.000")) ok(`${label} rab sort desc by total`);
+    const rabDesc = await rabTable
+      .locator("table tbody tr")
+      .first()
+      .textContent();
+    if ((rabDesc ?? "").includes("Rp 3.250.000"))
+      ok(`${label} rab sort desc by total`);
     else fail(`${label} rab sort desc: first row not 3.250.000`);
     // Sort cycle: klik kedua = asc (600.000 di atas).
     await rabTable.getByRole("button", { name: /Total/ }).click();
     await page.waitForTimeout(300);
-    const rabAsc = await rabTable.locator("table tbody tr").first().textContent();
+    const rabAsc = await rabTable
+      .locator("table tbody tr")
+      .first()
+      .textContent();
     if (!(rabAsc ?? "").includes("Rp 600.000"))
       fail(`${label} rab sort asc: first row not 600.000`);
     await rabTable.getByRole("button", { name: /Total/ }).click();
     await page.waitForTimeout(300);
     // Expand: Rincian → grup kategori + subtotal + aksi sekunder (Tolak/Revisi/Cetak).
-    const rabRincian = rabTable.getByRole("button", { name: "Rincian", exact: true });
-    await rabRincian.first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+    const rabRincian = rabTable.getByRole("button", {
+      name: "Rincian",
+      exact: true,
+    });
+    await rabRincian
+      .first()
+      .evaluate((el) => el.scrollIntoView({ block: "center" }));
     await rabRincian.first().click();
     await page.waitForTimeout(400);
     const rabExp = (await rabTable.textContent()) ?? "";
     if (!rabExp.includes("subtotal") || !rabExp.includes("PRODUCTION"))
       fail(`${label} rab expand: no category group/subtotal`);
-    else if (rabExp.includes("Cetak")) ok(`${label} rab expand grup/subtotal + aksi sekunder`);
+    else if (rabExp.includes("Cetak"))
+      ok(`${label} rab expand grup/subtotal + aksi sekunder`);
     // Single-open: buka baris lain menutup yang pertama.
-    const rabRincian2 = rabTable.getByRole("button", { name: "Rincian", exact: true });
-    await rabRincian2.first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+    const rabRincian2 = rabTable.getByRole("button", {
+      name: "Rincian",
+      exact: true,
+    });
+    await rabRincian2
+      .first()
+      .evaluate((el) => el.scrollIntoView({ block: "center" }));
     await rabRincian2.first().click();
     await page.waitForTimeout(400);
-    const rabOpenCount = await rabTable.getByRole("button", { name: "Tutup", exact: true }).count();
+    const rabOpenCount = await rabTable
+      .getByRole("button", { name: "Tutup", exact: true })
+      .count();
     if (rabOpenCount === 1) ok(`${label} rab expand single-open`);
     else fail(`${label} rab expand: not single-open (${rabOpenCount})`);
     // Builder di balik + (Q23): form tersembunyi sampai tombol + diklik.
-    await rabTable.getByRole("button", { name: "Tutup", exact: true }).first().click();
+    await rabTable
+      .getByRole("button", { name: "Tutup", exact: true })
+      .first()
+      .click();
     await page.waitForTimeout(200);
     const rabFormBefore = await rabTable.locator("[data-rab-form]").count();
     await rabTable.locator("[data-rab-toggle]").click();
     await page.waitForTimeout(300);
-    if (rabFormBefore !== 0 || !(await rabTable.locator("[data-rab-form]").isVisible()))
+    if (
+      rabFormBefore !== 0 ||
+      !(await rabTable.locator("[data-rab-form]").isVisible())
+    )
       fail(`${label} rab builder not behind + button`);
     else ok(`${label} rab builder hidden behind + button`);
     await rabTable.locator("[data-rab-toggle]").click(); // tutup builder
     await page.waitForTimeout(200);
     // Setujui sekali-klik (Q45): baris sent → #/transaksi + notice, tanpa confirm.
-    const setujuiBtn = rabTable.getByRole("button", { name: "Setujui", exact: true });
-    await setujuiBtn.first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+    const setujuiBtn = rabTable.getByRole("button", {
+      name: "Setujui",
+      exact: true,
+    });
+    await setujuiBtn
+      .first()
+      .evaluate((el) => el.scrollIntoView({ block: "center" }));
     await setujuiBtn.first().click();
     await page.waitForTimeout(600);
-    const rabBanner = (await page.locator('[role="status"]').textContent()) ?? "";
+    const rabBanner =
+      (await page.locator('[role="status"]').textContent()) ?? "";
     if (page.url().split("#")[1] !== "/transaksi")
       fail(`${label} setujui: hash is ${page.url()}`);
     else if (rabBanner.includes("disetujui"))
@@ -838,16 +1055,18 @@ for (const [label, w, h] of [
     else fail(`${label} setujui: notice missing (${rabBanner})`);
     // Buat RAB dari Paket (Q19): salin baris → auto-pindah #/rab + builder terisi.
     await navRab("Paket", "Paket 1 Camera");
-    await page.getByRole("button", { name: "Buat RAB", exact: true }).first().click();
+    await page
+      .getByRole("button", { name: "Buat RAB", exact: true })
+      .first()
+      .click();
     await page.waitForTimeout(600);
-    if (page.url().split("#")[1] === "/rab"){
+    if (page.url().split("#")[1] === "/rab") {
       const bform = page.locator('[data-view="rab"] [data-rab-form]');
       const btxt = (await bform.textContent()) ?? "";
       if ((await bform.isVisible()) && btxt.includes("SONY FDR AX-40"))
         ok(`${label} buat RAB → #/rab + baris tersalin ke builder`);
       else fail(`${label} buat RAB: builder kosong / baris tak tersalin`);
-    } else 
-      fail(`${label} buat RAB: hash is ${page.url()}`);
+    } else fail(`${label} buat RAB: hash is ${page.url()}`);
     // Confirm-timpa (Q21): builder sudah terisi → klik Buat RAB lagi muncul confirm.
     await navRab("Paket", "Paket 1 Camera");
     let rabConfirmShown = false;
@@ -855,9 +1074,13 @@ for (const [label, w, h] of [
       rabConfirmShown = true;
       d.dismiss();
     });
-    await page.getByRole("button", { name: "Buat RAB", exact: true }).first().click();
+    await page
+      .getByRole("button", { name: "Buat RAB", exact: true })
+      .first()
+      .click();
     await page.waitForTimeout(400);
-    if (rabConfirmShown) ok(`${label} buat RAB confirm-timpa saat builder terisi`);
+    if (rabConfirmShown)
+      ok(`${label} buat RAB confirm-timpa saat builder terisi`);
     else fail(`${label} buat RAB: confirm-timpa tidak muncul`);
 
     await go("Settings", "No. rekening");
