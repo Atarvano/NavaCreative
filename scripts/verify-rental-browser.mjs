@@ -1356,7 +1356,9 @@ for (const [label, w, h] of [
     if ((await pkView.locator("[data-paket-form]").count()) !== 0)
       fail(`${label} paket: form tambah harus tersembunyi default`);
     // Tanpa DELETE (B4): tak ada tombol hapus paket di mana pun.
-    if ((await pkView.getByRole("button", { name: /Hapus paket/i }).count()) !== 0)
+    if (
+      (await pkView.getByRole("button", { name: /Hapus paket/i }).count()) !== 0
+    )
       fail(`${label} paket: tombol hapus paket ada — tanpa DELETE (B4)`);
     // Expand: grup kategori + subtotal + total (plek dokumen, Q15).
     await pkView
@@ -1376,7 +1378,7 @@ for (const [label, w, h] of [
     // Form tambah di balik + (Q23); tutup = buang isian.
     await pkView.locator("[data-paket-toggle]").click();
     await page.waitForTimeout(250);
-    if ((await pkView.locator("[data-paket-form]").count()) === 1){
+    if ((await pkView.locator("[data-paket-form]").count()) === 1) {
       // Tambah baris kategori/jenis/qty/satuan/rate + subtotal & total tampil.
       const f = pkView.locator("[data-paket-form]");
       await f.locator("input[name=nama]").fill("Paket Dokumentasi");
@@ -1415,15 +1417,14 @@ for (const [label, w, h] of [
         else if (sent.nama !== undefined)
           fail(`${label} paket tambah: body POST salah: ${post.body}`);
       } else fail(`${label} paket tambah: POST /api/paket tak tercatat`);
-    } else 
-      fail(`${label} paket: form tambah tak terbuka di balik +`);
+    } else fail(`${label} paket: form tambah tak terbuka di balik +`);
     // Ubah paket (PATCH wholesale): form terisi baris lama + notice snapshot.
     {
       const card2 = pkView.locator('[data-paket-card][data-paket-id="2"]');
       await card2.getByRole("button", { name: "Ubah", exact: true }).click();
       await page.waitForTimeout(300);
       const uf = card2.locator("[data-paket-edit-form]");
-      if ((await uf.count()) === 1){
+      if ((await uf.count()) === 1) {
         const utxt = (await uf.textContent()) ?? "";
         if (
           !utxt.includes("SONY NXR-100") ||
@@ -1444,7 +1445,7 @@ for (const [label, w, h] of [
         const patch = writes.find(
           (w) => w.method === "PATCH" && w.path === "/api/paket/2",
         );
-        if (patch){
+        if (patch) {
           let sent = {};
           try {
             sent = JSON.parse(patch.body);
@@ -1460,10 +1461,8 @@ for (const [label, w, h] of [
             ok(`${label} paket ubah → PATCH baris wholesale (snapshot aman)`);
           else if (sent.baris !== undefined)
             fail(`${label} paket ubah: body PATCH salah: ${patch.body}`);
-        } else 
-          fail(`${label} paket ubah: PATCH /api/paket/2 tak tercatat`);
-      } else 
-        fail(`${label} paket ubah: form edit tak terbuka`);
+        } else fail(`${label} paket ubah: PATCH /api/paket/2 tak tercatat`);
+      } else fail(`${label} paket ubah: form edit tak terbuka`);
     }
 
     await go("Settings", "No. rekening");
