@@ -1,4 +1,5 @@
 import { requireSession } from './auth.js';
+import { isDate } from './validate.js';
 
 // Invoice router (ticket #45, issue #45): issue one Invoice per Transaksi +
 // payments + void. Rows live on the Transaksi (Q21): issue snapshots the
@@ -6,7 +7,6 @@ import { requireSession } from './auth.js';
 // INV-YYYY-NNNN from the id (B6). Labels DP/Cicilan/Pelunasan derived (B3).
 // Overdue derived (Q17, status only). Corrections via minus rows (M1).
 
-const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const today = () => new Date().toISOString().slice(0, 10);
 
 async function withBayar(db, inv) {

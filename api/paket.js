@@ -1,4 +1,5 @@
 import { requireSession } from './auth.js';
+import { isNonNegInt, isDate, validBaris } from './validate.js';
 
 // Paket router (ticket #42, issue #42): Paket template CRUD + rows.
 // Paket = template rincian (Q12): rows grouped by kategori (Q23), each row a
@@ -6,20 +7,6 @@ import { requireSession } from './auth.js';
 // alat_id set only where jenis=alat; jasa/biaya rows are free-text names.
 // Editing a Paket never rewrites past documents: RAB/Transaksi snapshot
 // rows at creation (#43+), so no cascade here. No DELETE (same rule as B4).
-
-const JENIS = ['alat', 'jasa', 'biaya'];
-const isNonNegInt = (v) => Number.isInteger(v) && v >= 0;
-
-function validBaris(b) {
-  if (typeof b !== 'object' || b === null) return 'Baris harus objek.';
-  if (!JENIS.includes(b.jenis)) return `jenis harus salah satu: ${JENIS.join(', ')}.`;
-  if (typeof b.nama !== 'string' || !b.nama.trim()) return 'Nama baris wajib diisi.';
-  if (!Number.isInteger(b.qty) || b.qty <= 0) return 'qty harus bilangan bulat > 0.';
-  if (!isNonNegInt(b.harga_satuan)) return 'harga_satuan harus bilangan bulat >= 0.';
-  if (b.jenis === 'alat' && b.alat_id !== undefined && b.alat_id !== null && !Number.isInteger(b.alat_id))
-    return 'alat_id harus id alat atau null.';
-  return null;
-}
 
 async function withRows(db, paket) {
   const { results } = await db

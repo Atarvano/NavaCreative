@@ -1,4 +1,5 @@
 import { requireSession } from './auth.js';
+import { isNonNegInt, isDate } from './validate.js';
 
 // Alat router (ticket #41): Alat CRUD + servis records + derived Modal /
 // pendapatan / balik-modal. No DELETE anywhere: Alat is archived via
@@ -6,26 +7,20 @@ import { requireSession } from './auth.js';
 // only transaksi_baris rows with jenis='alat' (Q13) — transaksi tables land
 // in issue #44, so until then pendapatan is 0 for every Alat.
 
-const isNonNegInt = (v) => Number.isInteger(v) && v >= 0;
-const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 async function withModal(db, alat) {
   const servis = await db
     .prepare('SELECT COALESCE(SUM(biaya), 0) AS s FROM alat_servis WHERE alat_id = ?')
     .bind(alat.id)
     .first();
-  let pendapatan = 0;
-  try {
-    const row = await db
-      .prepare(
-        "SELECT COALESCE(SUM(qty * harga_satuan), 0) AS p FROM transaksi_baris WHERE alat_id = ? AND jenis = 'alat'",
-      )
-      .bind(alat.id)
-      .first();
-    pendapatan = row.p;
-  } catch {
-    // transaksi_baris doesn't exist yet (lands in #44) — revenue stays 0.
-  }
+  // ponytail: transaksi_baris exists since migration 0004 — no try/catch.
+  const row = await db
+    .prepare(
+      "SELECT COALESCE(SUM(qty * harga_satuan), 0) AS p FROM transaksi_baris WHERE alat_id = ? AND jenis = 'alat'",
+    )
+    .bind(alat.id)
+    .first();
+  const pendapatan = row.p;
   const modal = alat.harga_beli + servis.s;
   return { ...alat, modal, pendapatan, balik_modal: pendapatan >= modal };
 }

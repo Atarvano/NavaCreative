@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { gsap, motion, typewrite, reveals, drift, magnetic } from '../lib/motion.js';
   import Pill from '../components/ui/Pill.svelte';
+  import { WA_LINK } from '../lib/services.js';
 
   // CTA heading line reveal + magnetic button (desktop) + stills plates
   // scale/opacity rise with CSS translateY offsets preserved: only opacity
@@ -70,7 +71,7 @@
     <span class="line-mask"><span class="line">with <em class="rupture not-italic text-signal-yellow">us?</em></span></span>
   </h2>
   <p data-reveal class="mx-auto mb-8 max-w-[34ch] text-subheading text-bone-white/70">Where art meets purpose and imagination knows no limits.</p>
-  <Pill href="https://wa.me/6285817999140" target="_blank" rel="noopener" variant="light" size="lg" magnetic>Start a Project</Pill>
+  <Pill href={WA_LINK} target="_blank" rel="noopener" variant="light" size="lg" magnetic>Start a Project</Pill>
   <div data-reveal class="cta-strip group mt-16 flex justify-center gap-4 max-md:flex-wrap">
     <img src="./img/work-misc-1.jpg" alt="Recent production still" width="1080" height="1350" loading="lazy" class="aspect-[4/5] w-[clamp(120px,18vw,260px)] object-cover grayscale group-hover:grayscale-0" />
     <img src="./img/work-misc-2.jpg" alt="Recent production still" width="1080" height="1350" loading="lazy" class="aspect-[4/5] w-[clamp(120px,18vw,260px)] -translate-y-6 object-cover grayscale group-hover:grayscale-0 max-md:translate-y-0" />

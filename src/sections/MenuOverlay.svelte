@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { gsap, motion } from '../lib/motion.js';
   import Pill from '../components/ui/Pill.svelte';
+  import { WA_LINK } from '../lib/services.js';
 
   // Full-screen Navy Ink nav (mobile only): the paused open/close timeline
   // plays on the `open` prop; the class toggle + scroll-lock below keep the
@@ -75,7 +76,7 @@
   </nav>
   <div class="menu-meta flex flex-wrap gap-x-8 gap-y-4 text-body-sm text-bone-white/70">
     <a href="https://instagram.com/navacreative.btm" target="_blank" rel="noopener" class="hover:text-bone-white">@navacreative.btm</a>
-    <a href="https://wa.me/6285817999140" target="_blank" rel="noopener" class="hover:text-bone-white">0858-1799-9140</a>
+    <a href={WA_LINK} target="_blank" rel="noopener" class="hover:text-bone-white">0858-1799-9140</a>
     <a href="mailto:navaproduction9@gmail.com" class="hover:text-bone-white">navaproduction9@gmail.com</a>
   </div>
 </div>

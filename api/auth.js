@@ -25,14 +25,16 @@ const randomId = () =>
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 
-const cookieOpts = (c) => ({
-  path: '/',
-  httpOnly: true,
-  maxAge: SESSION_TTL_SECONDS,
-  sameSite: 'Lax',
-  // Local dev serves http; production is always https.
-  secure: new URL(c.req.url).protocol === 'https:',
-});
+const cookieOpts = (c) => {
+  let secure = false;
+  try {
+    // Local dev serves http; production is always https.
+    secure = new URL(c.req.url).protocol === 'https:';
+  } catch {
+    secure = false;
+  }
+  return { path: '/', httpOnly: true, maxAge: SESSION_TTL_SECONDS, sameSite: 'Lax', secure };
+};
 
 // Guard for every /api/* route except /api/auth/login.
 export const requireSession = createMiddleware(async (c, next) => {
@@ -110,10 +112,3 @@ export function authRoutes(app) {
   });
 }
 
-export function guardApi(app) {
-  // Everything under /api/* except login requires a session.
-  app.use('/api/*', async (c, next) => {
-    if (c.req.path === '/api/auth/login') return next();
-    return requireSession(c, next);
-  });
-}

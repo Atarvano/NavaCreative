@@ -20,16 +20,13 @@ export function ringkasanRoutes(app) {
     const perAlat = [];
     for (const a of alat) {
       const s = await db.prepare('SELECT COALESCE(SUM(biaya), 0) AS s FROM alat_servis WHERE alat_id = ?').bind(a.id).first();
-      let p = 0;
-      try {
-        const row = await db
+      // ponytail: transaksi_baris exists since migration 0004 — no try/catch.
+      const p = (
+        await db
           .prepare("SELECT COALESCE(SUM(qty * harga_satuan), 0) AS p FROM transaksi_baris WHERE alat_id = ? AND jenis = 'alat'")
           .bind(a.id)
-          .first();
-        p = row.p;
-      } catch {
-        // Pre-#44 shape: no transaksi_baris table yet.
-      }
+          .first()
+      ).p;
       const modal = a.harga_beli + s.s;
       totalModal += modal;
       totalPendapatan += p;

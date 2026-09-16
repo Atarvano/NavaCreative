@@ -1,15 +1,13 @@
-// Service-page catalogue: titles, ledes, gallery items, and per-page og meta.
-// Cross-links derive from `slug`.
+// Service-page catalogue: titles, ledes, gallery items.
+// Cross-links derive from `slug`. Per-page meta lives in the static
+// *.html heads (build-time), so no description/og fields here.
+// ponytail: single WA_LINK — the number was literal in 4 files.
+export const WA_LINK = 'https://wa.me/6285817999140';
 export const SERVICES = [
   {
     slug: "photo-video",
     title: "Photo & Video Documentation",
     lede: "Photo and video documentation for prewedding, stage, ceremony, and event work — shot and edited in Batam, flexible with budgeting.",
-    description:
-      "Photo and video work by Nava Creative, Batam: prewedding, stage photography, photoshoots, and video documentation.",
-    ogDescription:
-      "Prewedding, stage, and photoshoot work by Nava Creative, Batam.",
-    ogImage: "img/pv-ihsan-ochi.jpg",
     gallery: [
       {
         src: "img/pv-ihsan-ochi.jpg",
@@ -81,10 +79,6 @@ export const SERVICES = [
     slug: "photo-product",
     title: "Photo Product",
     lede: "Clean, consistent product photography for catalogs, marketplaces, and social. Shot in Batam, open to discussion on budget.",
-    description:
-      "Photo and video work by Nava Creative, Batam: prewedding, stage photography, photoshoots, and video documentation.",
-    ogDescription: "Product photography by Nava Creative, Batam.",
-    ogImage: "img/hero-wide.jpg",
     gallery: [
       {
         src: "img/hero-wide.jpg",
@@ -132,10 +126,6 @@ export const SERVICES = [
     slug: "graphic-design",
     title: "Graphic Design",
     lede: "Posters, feeds, and brand collateral designed to hold together across print and social. Based in Batam.",
-    description:
-      "Photo and video work by Nava Creative, Batam: prewedding, stage photography, photoshoots, and video documentation.",
-    ogDescription: "Graphic design work by Nava Creative, Batam.",
-    ogImage: "img/gd-double-g.jpg",
     gallery: [
       {
         src: "img/gd-double-g.jpg",
@@ -167,10 +157,6 @@ export const SERVICES = [
     slug: "social-media",
     title: "Social Media Handling",
     lede: "Content planning, shooting, and posting handled end to end — so the feed keeps moving without you managing it.",
-    description:
-      "Photo and video work by Nava Creative, Batam: prewedding, stage photography, photoshoots, and video documentation.",
-    ogDescription: "Social media handling by Nava Creative, Batam.",
-    ogImage: "img/about-bts.jpg",
     gallery: [
       {
         src: "img/about-bts.jpg",
@@ -210,11 +196,6 @@ export const SERVICES = [
     slug: "live-streaming",
     title: "Live Streaming",
     lede: "Multi-camera live streaming for ceremonies, graduations, and events — recorded and delivered alongside the stream.",
-    description:
-      "Photo and video work by Nava Creative, Batam: prewedding, stage photography, photoshoots, and video documentation.",
-    ogDescription:
-      "Live streaming and event documentation by Nava Creative, Batam.",
-    ogImage: "img/vid-graduation.jpg",
     gallery: [
       {
         src: "img/vid-graduation.jpg",

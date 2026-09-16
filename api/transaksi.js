@@ -1,4 +1,5 @@
 import { requireSession } from './auth.js';
+import { isNonNegInt, isDate, validBaris } from './validate.js';
 
 // Transaksi router (ticket #44, issue #44): walk-in CRUD + lifecycle +
 // clash warning + Brief. Rows snapshot at creation (same shape as
@@ -6,20 +7,8 @@ import { requireSession } from './auth.js';
 // terjadwal/berjalan jobs (B1) → warning naming the job, save proceeds.
 // No DELETE (M1). Invoice lock of rows arrives in #45.
 
-const JENIS = ['alat', 'jasa', 'biaya'];
 const STATUS = ['terjadwal', 'berjalan', 'selesai', 'batal'];
-const isNonNegInt = (v) => Number.isInteger(v) && v >= 0;
-const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const isOptDate = (v) => v === '' || v === undefined || isDate(v);
-
-function validBaris(b) {
-  if (typeof b !== 'object' || b === null) return 'Baris harus objek.';
-  if (!JENIS.includes(b.jenis)) return `jenis harus salah satu: ${JENIS.join(', ')}.`;
-  if (typeof b.nama !== 'string' || !b.nama.trim()) return 'Nama baris wajib diisi.';
-  if (!Number.isInteger(b.qty) || b.qty <= 0) return 'qty harus bilangan bulat > 0.';
-  if (!isNonNegInt(b.harga_satuan)) return 'harga_satuan harus bilangan bulat >= 0.';
-  return null;
-}
 
 async function withRows(db, t) {
   const { results } = await db

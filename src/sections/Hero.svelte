@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { gsap, motion, magnetic } from '../lib/motion.js';
   import Pill from '../components/ui/Pill.svelte';
+  import { WA_LINK } from '../lib/services.js';
 
   // Paused intro timeline (the preloader plays it via play()); owns its
   // initial states via fromTo since the Svelte shell releases the
@@ -72,7 +73,7 @@
   <div class="hero-side mb-16 flex items-end justify-between gap-8 max-md:flex-col max-md:items-start">
     <p class="max-w-[30rem] text-subheading text-graphite">A creative entity bringing fresh, solution-oriented ideas to today's visual and communication needs.</p>
     <div class="flex flex-wrap gap-2">
-      <Pill href="https://wa.me/6285817999140" target="_blank" rel="noopener" magnetic>Start a Project</Pill>
+      <Pill href={WA_LINK} target="_blank" rel="noopener" magnetic>Start a Project</Pill>
       <Pill href="#work" variant="ghost" magnetic>See Work</Pill>
     </div>
   </div>

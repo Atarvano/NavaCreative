@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authRoutes, guardApi } from './auth.js';
+import { authRoutes } from './auth.js';
 import { alatRoutes } from './alat.js';
 import { paketRoutes } from './paket.js';
 import { rabRoutes } from './rab.js';
@@ -22,7 +22,8 @@ transaksiRoutes(app);
 invoiceRoutes(app);
 ringkasanRoutes(app);
 settingsRoutes(app);
-guardApi(app);
+// ponytail: no global guardApi — every route carries requireSession
+// itself, so the guard can't be silently shadowed by route order.
 
 app.notFound((c) => c.json({ error: 'Tidak ditemukan.' }, 404));
 

@@ -149,7 +149,7 @@
     resetPkInput();
   }
 
-  const pkSum = (rows) => rows.reduce((t, b) => t + b.qty * b.harga_satuan, 0);
+  const pkSum = subtotal;
 
   async function simpanPaket(e) {
     e.preventDefault();
@@ -224,6 +224,24 @@
   let nbKategori = $state('PRODUCTION');
 
   const rupiah = (n) => 'Rp ' + Number(n).toLocaleString('id-ID');
+  // ponytail: one subtotal / one grouper / one sorter for all tables.
+  const subtotal = (baris) => baris.reduce((t, b) => t + b.qty * b.harga_satuan, 0);
+  const grupBaris = (baris) => {
+    const by = new Map();
+    for (const b of baris ?? []) {
+      const g = b.kategori || 'PRODUCTION';
+      if (!by.has(g)) by.set(g, []);
+      by.get(g).push(b);
+    }
+    return [...by.entries()].map(([kategori, rows]) => ({ kategori, baris: rows, subtotal: subtotal(rows) }));
+  };
+  // Siklus sort satu kolom: desc → asc → terbaru (null). get/set agar
+  // tx/rab/inv bisa berbagi badan yang sama.
+  function urutkan(get, set, key) {
+    const [k, desc] = get();
+    if (k === key) set(!desc ? null : k, !desc ? true : false);
+    else set(key, true);
+  }
 
   // --- Cetak plek dokumen asli (redesign 08, #61) ---
   // Logo merah studio: file statis di public/ (B5). Sampai user menaruh file,
@@ -257,7 +275,13 @@
   const CETAK_CSS = `body{font-family:Arial,Helvetica,sans-serif;max-width:720px;margin:32px auto;color:#111;font-size:13px}
     h1{color:${MERAH};font-size:22px;margin:18px 0 10px;letter-spacing:0}
     table.layout{width:100%;border-collapse:collapse}
-    .merah{color:${MERAH}}`; 
+    .merah{color:${MERAH}}`;
+  // ponytail: satu pintu cetak — 3 print fn hanya menyetor judul + body.
+  function cetakDokumen(judul, body) {
+    const w = window.open('', '_blank');
+    w.document.write(`<html lang="id"><head><meta charset="utf-8"><title>${judul}</title><style>${CETAK_CSS}</style></head><body onload="print()">${body}</body></html>`);
+    w.document.close();
+  }
 
   async function api(path, opts = {}) {
     const res = await fetch(path, {
@@ -521,7 +545,7 @@
     rbBaris = rbBaris.filter((_, j) => j !== i);
   }
 
-  const rbSum = () => rbBaris.reduce((t, b) => t + b.qty * b.harga_satuan, 0);
+  const rbSum = () => subtotal(rbBaris);
 
   async function simpanRab(e) {
     e.preventDefault();
@@ -597,8 +621,7 @@
           <tr><td colspan="2" style="padding:6px 8px;text-align:right;font-weight:700;color:${MERAH}">Subtotal ${g.kategori}</td><td style="padding:6px 8px;text-align:right;font-weight:700;color:${MERAH}">${rupiah(g.subtotal)}</td></tr>`;
       })
       .join('');
-    const w = window.open('', '_blank');
-    w.document.write(`<html lang="id"><head><meta charset="utf-8"><title>${r.nomor}</title><style>${CETAK_CSS}</style></head><body onload="print()">
+    cetakDokumen(r.nomor, `
       ${kopDokumen('RANCANGAN ANGGARAN BIAYA')}
       <h1>RANCANGAN ANGGARAN BIAYA</h1>
       <table class="layout" style="margin:8px 0 16px"><tr>
@@ -615,9 +638,7 @@
         <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:18px;color:${MERAH};white-space:nowrap">${rupiah(r.total)}</td>
       </tr></table>
       ${r.catatan ? `<p style="margin-top:16px"><b>Catatan</b><br>${r.catatan}</p>` : ''}
-      <p style="margin-top:16px;font-style:italic;color:#555">RAB bersifat estimasi; harga final dapat menyesuaikan scope project.</p>
-      </body></html>`);
-    w.document.close();
+      <p style="margin-top:16px;font-style:italic;color:#555">RAB bersifat estimasi; harga final dapat menyesuaikan scope project.</p>`);
   }
 
   // --- Transaksi walk-in + lifecycle + Brief (#44) ---
@@ -667,30 +688,11 @@
     })(),
   );
 
-  function txUrutkan(key) {
-    if (txSortKey === key) {
-      if (!txSortDesc) txSortKey = null; // klik ketiga: kembali ke terbaru
-      else txSortDesc = false;
-    } else {
-      txSortKey = key;
-      txSortDesc = true;
-    }
-  }
-
   // Baris dikelompokkan per kategori + subtotal, plek dokumen (Q32).
-  const txGrup = (t) => {
-    const by = new Map();
-    for (const b of t.baris ?? []) {
-      const g = b.kategori || 'PRODUCTION';
-      if (!by.has(g)) by.set(g, []);
-      by.get(g).push(b);
-    }
-    return [...by.entries()].map(([kategori, baris]) => ({
-      kategori,
-      baris,
-      subtotal: baris.reduce((s, b) => s + b.qty * b.harga_satuan, 0),
-    }));
-  };
+  const txGrup = (t) => grupBaris(t.baris);
+  function txUrutkan(key) {
+    urutkan(() => [txSortKey, txSortDesc], (k, d) => { txSortKey = k; txSortDesc = d; }, key);
+  }
 
   // 401 mid-draft (Q36): stash ke localStorage sebelum redirect ke login,
   // restore + notice setelah login. Key per builder.
@@ -821,45 +823,14 @@
   );
 
   function rabUrutkan(key) {
-    if (rabSortKey === key) {
-      if (!rabSortDesc) rabSortKey = null; // klik ketiga: kembali ke terbaru
-      else rabSortDesc = false;
-    } else {
-      rabSortKey = key;
-      rabSortDesc = true;
-    }
+    urutkan(() => [rabSortKey, rabSortDesc], (k, d) => { rabSortKey = k; rabSortDesc = d; }, key);
   }
 
-  // Expand grup kategori + subtotal, plek dokumen (Q32) — helper sama dgn txGrup.
-  const rabGrup = (r) => {
-    const by = new Map();
-    for (const b of r.baris ?? []) {
-      const g = b.kategori || 'PRODUCTION';
-      if (!by.has(g)) by.set(g, []);
-      by.get(g).push(b);
-    }
-    return [...by.entries()].map(([kategori, baris]) => ({
-      kategori,
-      baris,
-      subtotal: baris.reduce((s, b) => s + b.qty * b.harga_satuan, 0),
-    }));
-  };
+  // Expand grup kategori + subtotal, plek dokumen (Q32).
+  const rabGrup = (r) => grupBaris(r.baris);
 
-  // Expand Paket (#60): grup kategori + subtotal, plek dokumen (Q15) —
-  // helper sama dgn txGrup/rabGrup.
-  const paketGrup = (p) => {
-    const by = new Map();
-    for (const b of p.baris ?? []) {
-      const g = b.kategori || 'PRODUCTION';
-      if (!by.has(g)) by.set(g, []);
-      by.get(g).push(b);
-    }
-    return [...by.entries()].map(([kategori, baris]) => ({
-      kategori,
-      baris,
-      subtotal: baris.reduce((s, b) => s + b.qty * b.harga_satuan, 0),
-    }));
-  };
+  // Expand Paket (#60): grup kategori + subtotal, plek dokumen (Q15).
+  const paketGrup = (p) => grupBaris(p.baris);
 
   // --- Invoice (#45): terbit dari transaksi, bayar, void, cetak ---
   let invoices = $state([]);
@@ -903,24 +874,18 @@
 
   // Sort satu kolom client-side (Q24) — Total / Tempo; klik cycle desc→asc→terbaru.
   function invUrutkan(key) {
-    if (invSortKey === key) {
-      if (!invSortDesc) invSortKey = null; // klik ketiga: kembali ke terbaru
-      else invSortDesc = false;
-    } else {
-      invSortKey = key;
-      invSortDesc = true;
-    }
+    urutkan(() => [invSortKey, invSortDesc], (k, d) => { invSortKey = k; invSortDesc = d; }, key);
   }
 
   // Terbitkan = primer sekali-klik (Q45: tanpa confirm — void + koreksi
   // minus tetap pengaman), tempo default H+7, auto-pindah #/invoice + notice.
   // H+7 dihitung tanggal LOKAL, bukan UTC (toISOString bisa geser sehari
   // kalau diterbitkan pagi buta WIB).
+  // ponytail: en-CA memberi YYYY-MM-DD lokal tanpa padStart manual.
   const hariIniPlus = (n) => {
     const d = new Date();
     d.setDate(d.getDate() + n);
-    const p = (x) => String(x).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    return d.toLocaleDateString('en-CA');
   };
   async function terbitkan(t) {
     const jt = hariIniPlus(7);
@@ -1023,8 +988,7 @@
     // settings bank diganti kemudian. Fallback ke settings bila snapshot kosong.
     const bankTeks = i.bank_snapshot || [settings.bank, settings.norek, settings.atas_nama].filter(Boolean).join(' ');
     const s = settings;
-    const w = window.open('', '_blank');
-    w.document.write(`<html lang="id"><head><meta charset="utf-8"><title>${i.nomor}</title><style>${CETAK_CSS}</style></head><body onload="print()">
+    cetakDokumen(i.nomor, `
       ${kopDokumen(i.nomor)}
       <h1>INVOICE</h1>
       <table class="layout" style="margin:8px 0 16px"><tr>
@@ -1050,9 +1014,7 @@
         ${pays ? `<table class="layout" style="margin-top:8px"><tr><th style="text-align:left;padding:4px 8px;font-size:11px;color:#777">Tanggal</th><th style="text-align:left;padding:4px 8px;font-size:11px;color:#777">Label</th><th style="text-align:left;padding:4px 8px;font-size:11px;color:#777">Metode</th><th style="text-align:right;padding:4px 8px;font-size:11px;color:#777">Jumlah</th></tr>${pays}</table>` : '<p style="margin:8px 0 0;color:#777">Belum ada pembayaran.</p>'}
       </div>
       <p style="margin-top:16px"><b>TRANSFER KE</b><br>${bankTeks}</p>
-      <p style="color:#555">Pembayaran paling lambat 7 hari setelah invoice diterima.</p>
-      </body></html>`);
-    w.document.close();
+      <p style="color:#555">Pembayaran paling lambat 7 hari setelah invoice diterima.</p>`);
   }
 
   async function bukaTransaksi(t) {
@@ -1087,8 +1049,7 @@
       v
         ? `<tr><td style="vertical-align:top;padding:6px 8px;width:160px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">${k}</td><td style="vertical-align:top;padding:6px 8px;border-bottom:1px solid #eee">${String(v).replace(/\n/g, '<br>')}</td></tr>`
         : '';
-    const w = window.open('', '_blank');
-    w.document.write(`<html lang="id"><head><meta charset="utf-8"><title>Brief — ${t.nama_project}</title><style>${CETAK_CSS}</style></head><body onload="print()">
+    cetakDokumen(`Brief — ${t.nama_project}`, `
       ${kopDokumen('PROJECT BRIEF')}
       <h1>PROJECT BRIEF</h1>
       <p style="margin:0 0 12px;color:#555">${t.nama_project} · ${t.nama_client}</p>
@@ -1099,9 +1060,7 @@
       ${row('Lokasi', b.lokasi)}${row('Talent', b.talent)}
       ${row('Deliverables', b.deliverables)}${row('Deadline', b.deadline)}
       ${row('Notes', b.notes)}
-      </table>
-      </body></html>`);
-    w.document.close();
+      </table>`);
   }
 
   // --- Shell #54 (ADR-0012): sidebar + drawer + hash nav + banner ---

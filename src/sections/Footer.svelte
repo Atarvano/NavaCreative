@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { motion, lines, drift } from '../lib/motion.js';
+  import { WA_LINK } from '../lib/services.js';
 
   // Giant closing wordmark line reveal.
   // `base` prefixes the menu anchors: '' on the index, 'index.html'
@@ -42,7 +43,7 @@
     <div class="grid content-start gap-2 text-body-sm">
       <p class="mb-4 text-caption text-graphite uppercase">Contact</p>
       <a href="https://instagram.com/navacreative.btm" target="_blank" rel="noopener" class="text-ink-black transition-colors duration-200 hover:text-graphite">@navacreative.btm</a>
-      <a href="https://wa.me/6285817999140" target="_blank" rel="noopener" class="text-ink-black transition-colors duration-200 hover:text-graphite">0858-1799-9140</a>
+      <a href={WA_LINK} target="_blank" rel="noopener" class="text-ink-black transition-colors duration-200 hover:text-graphite">0858-1799-9140</a>
       <a href="mailto:navaproduction9@gmail.com" class="text-ink-black transition-colors duration-200 hover:text-graphite">navaproduction9@gmail.com</a>
     </div>
     <div class="grid content-start gap-2 text-body-sm">
