@@ -2,6 +2,8 @@
 // Spins the Hono app against a tiny in-memory D1 sham (admins + sessions +
 // alat + servis + transaksi + invoice + pembayaran + settings), then runs
 // the acceptance cases. Usage: node scripts/check-shell.mjs (exit 0 = pass).
+// Redesign 05 (#58): sham juga menutup matematika kas_bulan_ini (SUM
+// pembayaran bulan kalender berjalan) + job_aktif (terjadwal + berjalan).
 import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto?.subtle) globalThis.crypto = webcrypto;
@@ -29,12 +31,18 @@ const tbaris = [{ transaksi_id: 1, alat_id: 1, jenis: 'alat', qty: 40, harga_sat
 const transaksi = [
   { id: 1, nama_project: 'Nikahan', nama_client: 'S', total: 5500000, status: 'selesai' },
   { id: 2, nama_project: 'Drone', nama_client: 'S', total: 600000, status: 'terjadwal' },
+  { id: 3, nama_project: 'Live', nama_client: 'S', total: 900000, status: 'berjalan' },
 ];
 const invoice = [
   { id: 1, nomor: 'INV-2026-0001', total: 5500000, status: 'partial', jatuh_tempo: '2020-01-01' },
   { id: 2, nomor: 'INV-2026-0002', total: 600000, status: 'paid', jatuh_tempo: '2030-01-01' },
 ];
-const bayar = [{ invoice_id: 1, jumlah: 2000000 }];
+const bulanIni = new Date().toISOString().slice(0, 7);
+const bayar = [
+  { invoice_id: 1, jumlah: 2000000, tanggal: bulanIni + '-05' },
+  { invoice_id: 1, jumlah: 500000, tanggal: bulanIni + '-12' },
+  { invoice_id: 1, jumlah: 700000, tanggal: '2020-01-15' },
+];
 const settings = [
   { key: 'nama', value: 'Nava Production' },
   { key: 'hp', value: '085817999140' },
@@ -60,6 +68,17 @@ const DB = {
         if (s.includes('FROM admins WHERE id')) return { id: 1, username: 'admin' };
         if (s.includes('SUM(biaya)')) return { s: servis.filter((x) => x.alat_id === a[0]).reduce((t, x) => t + x.biaya, 0) };
         if (s.includes('FROM transaksi_baris')) return { p: tbaris.filter((r) => r.alat_id === a[0] && r.jenis === 'alat').reduce((t, r) => t + r.qty * r.harga_satuan, 0) };
+        // #58: kas bulan ini — sham memfilter bulan kalender LOKAL sama
+        // seperti strftime('%Y-%m', tanggal) vs 'now' localtime di D1.
+        // Urutan penting: cek strftime DULU, sebelum cabang SUM(jumlah)
+        // per-invoice (SQL kas juga mengandung SUM(jumlah)).
+        if (s.includes('FROM pembayaran') && s.includes('strftime'))
+          return {
+            k: bayar.filter((r) => r.tanggal.slice(0, 7) === bulanIni).reduce((t, r) => t + r.jumlah, 0),
+            b: bulanIni,
+          };
+        if (s.includes('COUNT(*)') && s.includes('FROM transaksi'))
+          return { n: transaksi.filter((t) => t.status === 'terjadwal' || t.status === 'berjalan').length };
         if (s.includes('SUM(jumlah)')) return { d: bayar.filter((r) => r.invoice_id === a[0]).reduce((t, r) => t + r.jumlah, 0) };
         throw new Error(`sham: unhandled SELECT ${s}`);
       },
@@ -97,7 +116,9 @@ const call = (path, opts = {}) =>
   });
 }
 
-// 2. Ringkasan math: modal 12jt, pendapatan 14jt, piutang 3.5jt, overdue 1.
+// 2. Ringkasan math: modal 12jt, pendapatan 14jt, piutang 2.3jt, overdue 1,
+// kas bulan ini 2.5jt (2 pembayaran bulan ini; yang 2020 tak ikut),
+// job aktif 2 (terjadwal + berjalan; selesai tak ikut).
 {
   const res = await call('/api/ringkasan', authed);
   const b = await res.json();
@@ -105,11 +126,18 @@ const call = (path, opts = {}) =>
     must(res.status === 200, `status ${res.status}`);
     must(b.total_modal === 12000000, `modal ${b.total_modal}`);
     must(b.total_pendapatan === 14000000, `pendapatan ${b.total_pendapatan}`);
-    must(b.piutang === 3500000, `piutang ${b.piutang}`);
+    must(b.piutang === 2300000, `piutang ${b.piutang}`);
     must(b.per_alat.length === 1 && b.per_alat[0].balik_modal === true, 'badge salah');
-    must(b.belum_lunas.length === 1 && b.belum_lunas[0].sisa === 3500000, 'belum-lunas salah');
+    must(b.belum_lunas.length === 1 && b.belum_lunas[0].sisa === 2300000, 'belum-lunas salah');
     must(b.overdue.length === 1 && b.overdue[0].nomor === 'INV-2026-0001', 'overdue salah');
-    must(b.recent.length === 2 && b.recent[0].id === 2, 'recent salah');
+    must(b.recent.length === 3 && b.recent[0].id === 3, 'recent salah');
+  });
+  // #58: field aditif baru — total lama tetap, matematika bulan + job tepat,
+  // dan bulan yang dijumlah ikut keluar (label FE dirender dari sini).
+  check('kas_bulan_ini + kas_bulan + job_aktif (#58)', () => {
+    must(b.kas_bulan_ini === 2500000, `kas_bulan_ini ${b.kas_bulan_ini}`);
+    must(b.kas_bulan === bulanIni, `kas_bulan ${b.kas_bulan}`);
+    must(b.job_aktif === 2, `job_aktif ${b.job_aktif}`);
   });
 }
 

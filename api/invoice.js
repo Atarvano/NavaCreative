@@ -102,6 +102,21 @@ export function invoiceRoutes(app) {
     return c.json(await withBayar(c.env.DB, upd), 201);
   });
 
+  // Ubah jatuh tempo (redesign #57): full invoice out, validasi gaya sibling.
+  // 404 bila tak ada, 400 bila format bukan YYYY-MM-DD, 401 tertutup guard.
+  app.patch('/api/invoice/:id', requireSession, async (c) => {
+    const id = Number(c.req.param('id'));
+    const inv = await c.env.DB.prepare('SELECT * FROM invoice WHERE id = ?').bind(id).first();
+    if (!inv) return c.json({ error: 'Invoice tidak ditemukan.' }, 404);
+    const body = await c.req.json().catch(() => ({}));
+    if (!isDate(body.jatuh_tempo)) return c.json({ error: 'jatuh_tempo harus YYYY-MM-DD.' }, 400);
+    await c.env.DB.prepare("UPDATE invoice SET jatuh_tempo = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+      .bind(body.jatuh_tempo, id)
+      .run();
+    const upd = await c.env.DB.prepare('SELECT * FROM invoice WHERE id = ?').bind(id).first();
+    return c.json(await withBayar(c.env.DB, upd));
+  });
+
   // Void: status batal, history preserved (M1).
   app.post('/api/invoice/:id/batal', requireSession, async (c) => {
     const id = Number(c.req.param('id'));

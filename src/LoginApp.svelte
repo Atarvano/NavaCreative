@@ -9,6 +9,16 @@
   let confirmPassword = $state('');
   let error = $state('');
   let busy = $state(false);
+  // Slot logo (redesign 08, #61): file statis public/img/logo-red.png (B5).
+  // Probe pakai fetch (bukan <img> langsung) supaya 404 file-yang-belum-ada
+  // tidak meninggalkan console error — fallback teks sampai file disuplai.
+  // Hanya 200 yang berarti "file ada" (stub verify menjawab 204 = kosong).
+  let logoAda = $state(false);
+  if (typeof fetch === 'function') {
+    fetch('img/logo-red.png', { method: 'HEAD' })
+      .then((r) => (logoAda = r.status === 200))
+      .catch(() => (logoAda = false));
+  }
 
   async function post(path, body) {
     const res = await fetch(path, {
@@ -72,7 +82,15 @@
 
 <main class="grid min-h-dvh place-items-center bg-canvas px-(--pad)">
   <div class="w-full max-w-sm">
-    <p class="text-subheading font-normal">Nava Creative</p>
+    <!-- Poles visual ringan (redesign 08, #61): slot logo + token Nava, flow 2-step tetap. -->
+    <div class="mb-6 flex items-center gap-3" data-login-brand>
+      {#if logoAda}
+        <img src="img/logo-red.png" alt="Nava Creative" class="h-12 w-auto" />
+      {:else}
+        <span class="text-subheading font-normal text-navy-ink" style="letter-spacing:-0.02em">Nava Creative</span>
+      {/if}
+    </div>
+    <p class="text-caption uppercase text-graphite">Dashboard rental</p>
     <h1 class="mt-1 text-heading-sm font-light">Masuk dashboard</h1>
 
     {#if step === 'login'}
