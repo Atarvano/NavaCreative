@@ -149,7 +149,9 @@
     resetPkInput();
   }
 
-  const pkSum = subtotal;
+  // ponytail: alias — didefinisikan ulang di bawah setelah subtotal ada
+  // (const tidak bisa dipakai sebelum deklarasi / TDZ).
+  const pkSum = (rows) => subtotal(rows);
 
   async function simpanPaket(e) {
     e.preventDefault();
