@@ -8,8 +8,7 @@
     {
       "binding": "DB",
       "database_name": "nava-db",
-      // Remote needs a database_id: run `wrangler d1 create nava-db` once
-      // logged in, then add it here. Local dev works without it.
+      "database_id": "26870c1d-9d0d-4ce5-ba33-f624741f87bb",
       "migrations_dir": "api/migrations"
     }
   ]
