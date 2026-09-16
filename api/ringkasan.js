@@ -5,6 +5,9 @@ import { requireSession } from './auth.js';
 // Modal ALAT (harga_beli + servis), pendapatan (jenis=alat rows), invoice
 // (total/dibayar/sisa/overdue), recent transactions. Unpaid/overdue is a
 // status list only (Q17, no reminder block).
+// Redesign 05 (#58): additive fields for the 4 metric cards — kas_bulan_ini
+// (sum Pembayaran in the running calendar month, local date) + job_aktif
+// (Transaksi terjadwal + berjalan). Existing totals unchanged.
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -46,6 +49,18 @@ export function ringkasanRoutes(app) {
       }
     }
     const recent = (await db.prepare('SELECT id, nama_project, nama_client, total, status FROM transaksi ORDER BY id DESC LIMIT 5').all()).results;
+    // #58: kas bulan ini = SUM Pembayaran bulan kalender berjalan. Batas
+    // bulan pakai tanggal LOKAL worker (strftime %Y-%m), bukan UTC ISO.
+    // Bulan yang dijumlah ikut dikembalikan (kas_bulan 'YYYY-MM') supaya
+    // label kartu FE dirender dari bulan yang SAMA dengan angkanya — tak
+    // bisa geser saat tengah malam beda zona worker vs browser.
+    const kasRow = await db
+      .prepare("SELECT COALESCE(SUM(jumlah), 0) AS k, strftime('%Y-%m', 'now', 'localtime') AS b FROM pembayaran WHERE strftime('%Y-%m', tanggal) = strftime('%Y-%m', 'now', 'localtime')")
+      .first();
+    // #58: job aktif = transaksi terjadwal + berjalan (angka sama dgn badge).
+    const jobAktif = (
+      await db.prepare("SELECT COUNT(*) AS n FROM transaksi WHERE status IN ('terjadwal', 'berjalan')").first()
+    ).n;
     return c.json({
       total_modal: totalModal,
       total_pendapatan: totalPendapatan,
@@ -54,6 +69,9 @@ export function ringkasanRoutes(app) {
       belum_lunas: belumLunas,
       overdue,
       recent,
+      kas_bulan_ini: kasRow.k,
+      kas_bulan: kasRow.b,
+      job_aktif: jobAktif,
     });
   });
 }

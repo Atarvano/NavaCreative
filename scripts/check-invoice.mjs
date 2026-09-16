@@ -95,6 +95,10 @@ const DB = {
           Object.assign(invoice.find((i) => i.id === a[0]), { status: 'batal' });
           return {};
         }
+        if (s.startsWith('UPDATE invoice SET jatuh_tempo')) {
+          Object.assign(invoice.find((i) => i.id === a[1]), { jatuh_tempo: a[0] });
+          return {};
+        }
         throw new Error(`sham: unhandled RUN ${s}`);
       },
     };
@@ -206,6 +210,40 @@ const call = (path, opts = {}) =>
     must(r1.status === 409, `diskon: ${r1.status}`);
     must(r2.status === 409, `baris: ${r2.status}`);
   });
+}
+
+// 10. PATCH jatuh_tempo (redesign #57): round-trip + validasi + 404 + overdue
+// turunan. Full invoice balik (bayar/dibayar/sisa ikut).
+{
+  // Invoice 1 lunas (sisa 0), jadi overdue selalu false. Pakai tempo baru
+  // yang pasti berbeda; cek field balik + tersimpan di baris.
+  const ok = await call('/api/invoice/1', json({ jatuh_tempo: '2031-05-06' }, 'PATCH'));
+  const okb = await ok.json();
+  const bad = await call('/api/invoice/1', json({ jatuh_tempo: 'minggu depan' }, 'PATCH'));
+  const badType = await call('/api/invoice/1', json({ jatuh_tempo: 20310506 }, 'PATCH'));
+  const miss = await call('/api/invoice/99', json({ jatuh_tempo: '2031-05-06' }, 'PATCH'));
+  // Overdue turunan: invoice 3 (unpaid) tempo mundur → true, maju → false.
+  await call('/api/invoice/3', json({ jatuh_tempo: '2020-01-01' }, 'PATCH'));
+  const od = await (await call('/api/invoice/3', authed)).json();
+  await call('/api/invoice/3', json({ jatuh_tempo: '2099-01-01' }, 'PATCH'));
+  const notOd = await (await call('/api/invoice/3', authed)).json();
+  check('PATCH jatuh_tempo round-trip + validasi', () => {
+    must(ok.status === 200, `status ${ok.status}`);
+    must(okb.jatuh_tempo === '2031-05-06', `tempo balik ${okb.jatuh_tempo}`);
+    must(invoice.find((i) => i.id === 1).jatuh_tempo === '2031-05-06', 'tempo tak tersimpan');
+    must(Array.isArray(okb.bayar) && okb.dibayar !== undefined && okb.sisa !== undefined, 'bukan full invoice out');
+    must(bad.status === 400, `format: ${bad.status}`);
+    must(badType.status === 400, `tipe: ${badType.status}`);
+    must(miss.status === 404, `unknown: ${miss.status}`);
+    must(od.overdue === true, 'overdue harus turunan dari tempo mundur');
+    must(notOd.overdue === false, 'overdue harus hilang setelah tempo maju');
+  });
+}
+
+// 11. PATCH tempo tanpa sesi → 401 (tertutup guard).
+{
+  const unauth = await call('/api/invoice/1', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jatuh_tempo: '2031-05-06' }) });
+  check('PATCH tempo 401 tanpa sesi', () => must(unauth.status === 401, `status ${unauth.status}`));
 }
 
 process.exit(failures ? 1 : 0);
