@@ -53,15 +53,16 @@
   const eventKurang = (a) =>
     a.tarif_event > 0 ? Math.max(0, Math.ceil((a.modal - a.pendapatan) / a.tarif_event)) : null;
 
-  // Badge Balik modal 3-warna (Q11/Q16): hijau balik modal; kuning tinggal
-  // ≤3 event (hampir); merah selebihnya / belum ada pendapatan. Teks selalu
-  // menyertai warna (jumlah event pasti saat tarif > 0).
+  // Badge Balik modal 3-warna (Q11/Q16, ticket 08): hijau balik modal; kuning
+  // tinggal ≤3 event; merah selebihnya. Uses the ADR-0013 tint tokens (the same
+  // ok/warn/danger family the spec names) so the trio clears ≥7:1 on the tint
+  // over the charcoal card; text always accompanies colour.
   const balikModalBadge = (a) => {
-    if (a.balik_modal) return { cls: 'bg-forest-teal text-bone-white', text: 'Balik modal' };
+    if (a.balik_modal) return { cls: 'bg-rw-ok/15 text-rw-ok-text', text: 'Balik modal' };
     const kurang = eventKurang(a);
-    if (kurang !== null && kurang <= 3) return { cls: 'bg-signal-yellow text-ink-black', text: `Kurang ${kurang} event` };
+    if (kurang !== null && kurang <= 3) return { cls: 'bg-rw-warn/15 text-rw-warn-text', text: `Kurang ${kurang} event` };
     return {
-      cls: 'bg-magenta-bloom text-bone-white',
+      cls: 'bg-rw-danger/15 text-rw-danger-text',
       text: kurang !== null ? `Belum balik modal · kurang ${kurang} event` : 'Belum balik modal',
     };
   };
@@ -1778,61 +1779,61 @@
 
 {#snippet alatCard(a)}
   {@const badge = balikModalBadge(a)}
-  <li class="border border-ash bg-bone-white p-4 {a.is_active ? '' : 'opacity-75'}" data-alat-card data-alat-id={a.id}>
+  <li class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 {a.is_active ? '' : 'opacity-75'}" data-alat-card data-alat-id={a.id}>
     <div class="flex flex-wrap items-baseline justify-between gap-2">
       <p class="text-body font-normal">
         {a.nama}
-        {#if !a.is_active}<span class="ml-2 text-caption text-graphite uppercase">Arsip</span>{/if}
+        {#if !a.is_active}<span class="ml-2 rounded-rw-badge bg-rw-off-white/10 px-2 py-0.5 text-caption uppercase text-rw-light-gray">Arsip</span>{/if}
       </p>
       <!-- Badge Balik modal 3-warna: hijau / kuning ≤3 event / merah. -->
-      <span class="rounded-pill px-3 py-1 text-caption {badge.cls}" data-balik-modal-badge>{badge.text}</span>
+      <span class="rounded-rw-badge px-2 py-0.5 text-caption {badge.cls}" data-balik-modal-badge>{badge.text}</span>
     </div>
-    <p class="mt-2 text-body-sm text-graphite">
-      Modal {rupiah(a.modal)} · Pendapatan {rupiah(a.pendapatan)} · Tarif {rupiah(a.tarif_event)}/event
+    <p class="mt-2 text-body-sm text-rw-light-gray">
+      Modal <span class="tabular-nums">{rupiah(a.modal)}</span> · Pendapatan <span class="tabular-nums">{rupiah(a.pendapatan)}</span> · Tarif <span class="tabular-nums">{rupiah(a.tarif_event)}</span>/event
     </p>
     <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
-      <button class="underline" onclick={() => toggle(a)} data-alat-servis-toggle>
+      <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => toggle(a)} data-alat-servis-toggle>
         {openId === a.id ? 'Tutup servis' : 'Servis & riwayat'}
       </button>
       {#if a.is_active}
-        <button class="underline" onclick={() => arsipkan(a)} data-alat-arsip>Arsipkan</button>
+        <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => arsipkan(a)} data-alat-arsip>Arsipkan</button>
       {:else}
-        <button class="underline" onclick={() => aktifkan(a)} data-alat-aktifkan>Aktifkan kembali</button>
+        <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => aktifkan(a)} data-alat-aktifkan>Aktifkan kembali</button>
       {/if}
     </div>
     {#if openId === a.id}
-      <div class="mt-4 border-t border-ash pt-4" data-alat-servis>
+      <div class="mt-4 border-t border-rw-border-gray/40 pt-4" data-alat-servis>
         <div class="flex flex-wrap items-baseline justify-between gap-2">
-          <p class="text-caption uppercase text-graphite">Riwayat servis — menambah Modal</p>
+          <p class="text-caption uppercase text-rw-light-gray">Riwayat servis: menambah Modal</p>
           <!-- Form catat = lapis-dua di dalam expand (Q18). -->
-          <button class="underline text-body-sm" onclick={() => bukaServisForm(a)} data-servis-form-toggle>
+          <button class="underline text-body-sm max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bukaServisForm(a)} data-servis-form-toggle>
             {servisFormId === a.id ? 'Tutup form' : '+ Catat servis'}
           </button>
         </div>
         {#if !servisRows.length}
-          <p class="mt-2 text-body-sm text-graphite">Belum ada servis tercatat.</p>
+          <p class="mt-2 text-body-sm text-rw-light-gray">Belum ada servis tercatat.</p>
         {:else}
           <ul class="mt-2 grid gap-2 text-body-sm">
             {#each servisRows as s (s.id)}
-              <li class="flex justify-between gap-2"><span>{tgl(s.tanggal)} — {s.keterangan || '(tanpa keterangan)'}</span><span>{rupiah(s.biaya)}</span></li>
+              <li class="flex justify-between gap-2"><span>{tgl(s.tanggal)}: {s.keterangan || '(tanpa keterangan)'}</span><span class="tabular-nums">{rupiah(s.biaya)}</span></li>
             {/each}
           </ul>
         {/if}
         {#if servisFormId === a.id}
-          <form class="mt-4 grid gap-3 border-t border-ash pt-4 max-md:grid-cols-1 md:grid-cols-[1fr_2fr_1fr_auto] md:items-end" onsubmit={(e) => addServis(a, e)} data-servis-form>
+          <form class="mt-4 grid gap-3 border-t border-rw-border-gray/40 pt-4 max-md:grid-cols-1 md:grid-cols-[1fr_2fr_1fr_auto] md:items-end" onsubmit={(e) => addServis(a, e)} data-servis-form>
             <label class="grid gap-1 text-body-sm">
               Tanggal
-              <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="date" required bind:value={svTanggal} />
+              <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="date" required bind:value={svTanggal} />
             </label>
             <label class="grid gap-1 text-body-sm">
               Keterangan
-              <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={svKeterangan} placeholder="Ganti kabel" />
+              <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={svKeterangan} placeholder="Ganti kabel" />
             </label>
             <label class="grid gap-1 text-body-sm">
               Biaya (Rp)
-              <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="0" step="1" required bind:value={svBiaya} />
+              <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" min="0" step="1" required bind:value={svBiaya} />
             </label>
-            <button class="rounded-pill bg-navy-ink px-5 py-3 text-body-sm text-bone-white max-md:w-full" type="submit">Catat</button>
+            <button class="rounded-rw-control bg-rw-accent px-5 py-2.5 text-body-sm text-rw-white max-md:py-3 max-md:w-full" type="submit">Catat</button>
           </form>
         {/if}
       </div>
@@ -1966,36 +1967,36 @@
     <section class="mt-8" data-view="alat">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-subheading font-normal">Alat</h2>
-        <button class="rounded-pill bg-navy-ink px-5 py-3 text-body-sm text-bone-white" onclick={bukaAlatBuilder} data-alat-toggle>
+        <button class="rounded-rw-control bg-rw-accent px-5 py-2.5 text-body-sm text-rw-white max-md:py-3" onclick={bukaAlatBuilder} data-alat-toggle>
           {alatBuilderOpen ? 'Tutup' : '+ Alat baru'}
         </button>
       </div>
 
       {#if alatBuilderOpen}
-      <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end" onsubmit={addAlat} data-alat-form>
+      <form class="mt-4 grid gap-4 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end" onsubmit={addAlat} data-alat-form>
         <label class="grid gap-1 text-body-sm">
           Nama
-          <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="nama" required bind:value={nama} placeholder="Sony NXR-100" />
+          <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" name="nama" required bind:value={nama} placeholder="Sony NXR-100" />
         </label>
         <label class="grid gap-1 text-body-sm">
           Harga beli (Rp)
-          <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="harga_beli" type="number" min="0" step="1" required bind:value={hargaBeli} placeholder="10000000" />
+          <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" name="harga_beli" type="number" min="0" step="1" required bind:value={hargaBeli} placeholder="10000000" />
         </label>
         <label class="grid gap-1 text-body-sm">
           Tarif/event (Rp)
-          <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="tarif_event" type="number" min="0" step="1" required bind:value={tarifEvent} placeholder="350000" />
+          <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" name="tarif_event" type="number" min="0" step="1" required bind:value={tarifEvent} placeholder="350000" />
         </label>
-        <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white disabled:opacity-50 max-md:w-full" type="submit" disabled={busy}>
-          {busy ? '…' : 'Tambah'}
+        <button class="rounded-rw-control bg-rw-accent px-6 py-2.5 text-body-sm text-rw-white disabled:opacity-50 max-md:py-3 max-md:w-full" type="submit" disabled={busy}>
+          {busy ? 'Menyimpan…' : 'Tambah'}
         </button>
       </form>
       {/if}
 
       {#if !alat.length}
         <!-- Empty state: satu baris + CTA (Q34). -->
-        <p class="mt-4 text-body-sm text-graphite">Belum ada alat. Tambahkan lewat tombol “+ Alat baru” di atas.</p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Belum ada alat. Tambahkan lewat tombol “+ Alat baru” di atas.</p>
       {:else if !alatAktif.length}
-        <p class="mt-4 text-body-sm text-graphite">Semua alat terarsip. <button class="underline" onclick={() => (showArsip = true)} data-arsip-toggle>Tampilkan arsip</button></p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Semua alat terarsip. <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => (showArsip = true)} data-arsip-toggle>Tampilkan arsip</button></p>
       {:else}
         <ul class="mt-4 grid gap-4">
           {#each alatAktif as a (a.id)}
@@ -2006,8 +2007,8 @@
 
       {#if alatArsip.length}
         <!-- Arsip: default-sembunyi (Q27), toggle sesi; tanpa hapus fisik. -->
-        <div class="mt-8 border-t border-ash pt-4">
-          <button class="text-body-sm underline" onclick={() => (showArsip = !showArsip)} data-arsip-toggle>
+        <div class="mt-8 border-t border-rw-border-gray/40 pt-4">
+          <button class="text-body-sm underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => (showArsip = !showArsip)} data-arsip-toggle>
             {showArsip ? 'Sembunyikan arsip' : `Tampilkan arsip (${alatArsip.length})`}
           </button>
           {#if showArsip}
