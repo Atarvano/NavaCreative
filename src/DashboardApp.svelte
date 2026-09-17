@@ -1307,10 +1307,27 @@
 
   // Chip status 3 warna + teks (Q11): hijau selesai, kuning berjalan,
   // merah bahaya. Teks status tetap tampil di sebelah warna.
+  // Satu klasifikasi lifecycle dipakai bersama: palette light (landing-era
+  // views, ticket 04-06) dan palette rw dark memetakan kind yang SAMA.
+  const statusKind = (status, overdue = false) => {
+    if (overdue || status === 'batal' || status === 'rejected') return 'danger';
+    if (status === 'paid' || status === 'approved' || status === 'selesai') return 'ok';
+    return 'neutral';
+  };
   const chipCls = (status, overdue = false) => {
-    if (overdue || status === 'batal' || status === 'rejected') return 'bg-magenta-bloom text-bone-white';
-    if (status === 'paid' || status === 'approved' || status === 'selesai') return 'bg-forest-teal text-bone-white';
+    const kind = statusKind(status, overdue);
+    if (kind === 'danger') return 'bg-magenta-bloom text-bone-white';
+    if (kind === 'ok') return 'bg-forest-teal text-bone-white';
     return 'bg-signal-yellow text-ink-black';
+  };
+  // Chip status versi Railway (ADR-0013 Q19): teks terang di atas tint 15%,
+  // kontras >=7:1 pada permukaan charcoal #33323E tempat badge ini dirender.
+  // Nilai status dari data tetap apa adanya.
+  const rwChip = (status, overdue = false) => {
+    const kind = statusKind(status, overdue);
+    if (kind === 'danger') return 'bg-rw-danger/15 text-rw-danger-text';
+    if (kind === 'ok') return 'bg-rw-ok/15 text-rw-ok-text';
+    return 'bg-rw-off-white/10 text-rw-off-white';
   };
 
   // Tanggal tampil Indonesia pendek (Q30): 2 Agu 2026. Input tetap date.
@@ -2196,32 +2213,46 @@
     </section>
     {/if}
     {#if view === 'ringkasan'}
-    <!-- Ringkasan (#58): pintu masuk kerja harian — 4 kartu klik-lompat →
-         Perlu perhatian → Transaksi terbaru. Semua kartu/item/baris bisa
-         diklik sesuai mapping spec. -->
+    <!-- Ringkasan (#58, ticket 03): pintu masuk kerja harian. Satu kartu hero
+         (kas masuk bulan ini) sebagai angka terpenting, dikelilingi grid metrik
+         flat; lalu Perlu perhatian dan Transaksi terbaru. Semua kartu/item/baris
+         klik-lompat sesuai mapping spec; deep-link tetap sama persis. -->
     <section class="mt-8" data-view="ringkasan">
       <h2 class="text-subheading font-normal">Ringkasan</h2>
       {#if !ringkasan}
         <div class="mt-4">{@render skeleton(4)}</div>
       {:else}
-        <div class="mt-4 grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <!-- Label bulan statis (bukan filter tanggal). Klik → Invoice. -->
-          <button class="border border-ash bg-bone-white p-4 text-left" onclick={() => lompatInvoice()} data-card-kas>
-            <p class="text-caption text-graphite uppercase">Kas masuk {bulanIni}</p>
-            <p class="text-subheading font-normal">{rupiah(ringkasan.kas_bulan_ini)}</p>
+        <div class="mt-4 grid gap-4">
+          <!-- Hero: satu angka terpenting, selebar grid. Label kecil di atas,
+               nominal besar serif di bawah. Klik → Invoice (label bulan statis,
+               bukan filter tanggal — mapping #58 tak berubah). -->
+          <button
+            class="group flex flex-wrap items-end justify-between gap-4 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-6 text-left transition-colors hover:border-rw-border-gray"
+            onclick={() => lompatInvoice()}
+            data-card-kas
+          >
+            <span class="grid gap-3">
+              <span class="text-caption uppercase tracking-wide text-rw-light-gray">Kas masuk {bulanIni}</span>
+              <span class="font-rw-serif text-heading-sm leading-none">{rupiah(ringkasan.kas_bulan_ini)}</span>
+            </span>
+            <span class="text-body-sm text-rw-light-gray transition-colors group-hover:text-rw-off-white" aria-hidden="true">Lihat Invoice →</span>
           </button>
-          <button class="border border-ash bg-bone-white p-4 text-left" onclick={() => lompatInvoice('unpaid')} data-card-piutang>
-            <p class="text-caption text-graphite uppercase">Outstanding</p>
-            <p class="text-subheading font-normal">{rupiah(ringkasan.piutang)}</p>
-          </button>
-          <button class="border border-ash bg-bone-white p-4 text-left" onclick={() => go('alat')} data-card-alat>
-            <p class="text-caption text-graphite uppercase">Alat balik modal</p>
-            <p class="text-subheading font-normal">{alatBalikModal}/{ringkasan.per_alat.length}</p>
-          </button>
-          <button class="border border-ash bg-bone-white p-4 text-left" onclick={() => lompatTransaksi('terjadwal')} data-card-job>
-            <p class="text-caption text-graphite uppercase">Job aktif</p>
-            <p class="text-subheading font-normal">{ringkasan.job_aktif}</p>
-          </button>
+
+          <!-- Grid metrik pendamping: label kecil, angka medium. -->
+          <div class="grid grid-cols-2 gap-4 md:grid-cols-3">
+            <button class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 text-left transition-colors hover:border-rw-border-gray" onclick={() => lompatInvoice('unpaid')} data-card-piutang>
+              <p class="text-caption uppercase tracking-wide text-rw-light-gray">Outstanding</p>
+              <p class="mt-2 text-subheading font-normal">{rupiah(ringkasan.piutang)}</p>
+            </button>
+            <button class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 text-left transition-colors hover:border-rw-border-gray" onclick={() => go('alat')} data-card-alat>
+              <p class="text-caption uppercase tracking-wide text-rw-light-gray">Alat balik modal</p>
+              <p class="mt-2 text-subheading font-normal">{alatBalikModal}/{ringkasan.per_alat.length}</p>
+            </button>
+            <button class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 text-left transition-colors hover:border-rw-border-gray max-md:col-span-2" onclick={() => lompatTransaksi('terjadwal')} data-card-job>
+              <p class="text-caption uppercase tracking-wide text-rw-light-gray">Job aktif</p>
+              <p class="mt-2 text-subheading font-normal">{ringkasan.job_aktif}</p>
+            </button>
+          </div>
         </div>
 
         <!-- Perlu perhatian (Q7): overdue + belum-lunas saja, tanpa
@@ -2231,10 +2262,10 @@
           <ul class="mt-2 grid gap-2">
             {#each perhatian as b (b.id)}
               <li>
-                <button class="flex w-full justify-between gap-2 border border-ash bg-bone-white p-3 text-left text-body-sm" onclick={() => lompatInvoice(b.isOverdue ? 'overdue' : 'unpaid', b.id)} data-perhatian-item>
-                  <span>
+                <button class="flex w-full justify-between gap-2 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3 text-left text-body-sm transition-colors hover:border-rw-border-gray" onclick={() => lompatInvoice(b.isOverdue ? 'overdue' : 'unpaid', b.id)} data-perhatian-item>
+                  <span class="flex items-center gap-2">
                     {b.nomor} · tempo {tgl(b.jatuh_tempo)}
-                    {#if b.isOverdue}<span class="ml-2 rounded-pill bg-magenta-bloom px-2 py-0.5 text-caption text-bone-white">overdue</span>{/if}
+                    {#if b.isOverdue}<span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(b.status, true)}">overdue</span>{/if}
                   </span>
                   <span>{rupiah(b.sisa)}</span>
                 </button>
@@ -2242,7 +2273,7 @@
             {/each}
           </ul>
         {:else}
-          <p class="mt-2 border border-ash bg-bone-white p-3 text-body-sm text-graphite" data-all-clear>Semua invoice lunas — tidak ada yang perlu perhatian.</p>
+          <p class="mt-2 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3 text-body-sm text-rw-light-gray" data-all-clear>Semua invoice lunas, tidak ada yang perlu perhatian.</p>
         {/if}
 
         <h3 class="mt-8 text-body font-normal">Transaksi terbaru</h3>
@@ -2250,15 +2281,15 @@
           <ul class="mt-2 grid gap-2">
             {#each ringkasan.recent as t (t.id)}
               <li>
-                <button class="flex w-full justify-between gap-2 border border-ash bg-bone-white p-3 text-left text-body-sm" onclick={() => lompatTransaksi('semua', t.id)} data-recent-item>
-                  <span>{t.nama_project} · {t.nama_client} <span class="rounded-pill px-2 py-0.5 text-caption {chipCls(t.status)}">{t.status}</span></span>
+                <button class="flex w-full justify-between gap-2 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3 text-left text-body-sm transition-colors hover:border-rw-border-gray" onclick={() => lompatTransaksi('semua', t.id)} data-recent-item>
+                  <span class="flex items-center gap-2">{t.nama_project} · {t.nama_client} <span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(t.status)}">{t.status}</span></span>
                   <span>{rupiah(t.total)}</span>
                 </button>
               </li>
             {/each}
           </ul>
         {:else}
-          <p class="mt-2 border border-ash bg-bone-white p-3 text-body-sm text-graphite">Belum ada transaksi. Mulai lewat tombol “+ Walk-in” di Transaksi.</p>
+          <p class="mt-2 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3 text-body-sm text-rw-light-gray">Belum ada transaksi. Mulai lewat tombol “+ Walk-in” di Transaksi.</p>
         {/if}
       {/if}
     </section>

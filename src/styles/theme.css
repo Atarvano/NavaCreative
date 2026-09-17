@@ -89,13 +89,16 @@
 
  /* Status text variants (ADR-0013 Q19, AA-verified on #13111C). Kept as named
     tokens so badges never hand-pick a hex. Backgrounds are laid on with an
-    alpha of the base colour; text uses the lighter variant for contrast. */
+    alpha of the base colour; text uses the lighter variant for contrast.
+    The badge renders on the charcoal surface (#33323E), whose tint is lighter
+    than the ground, so these text variants are tuned to clear >=7:1 on that
+    tint (not only on #13111C). Verified pairs: ok 7.65, warn 7.03, danger 7.21. */
  --color-rw-ok: #3fb950;
- --color-rw-ok-text: #56d364;
+ --color-rw-ok-text: #a5f3b6;
  --color-rw-warn: #d29922;
- --color-rw-warn-text: #e3b341;
+ --color-rw-warn-text: #f5d68a;
  --color-rw-danger: #f85149;
- --color-rw-danger-text: #ff7b72;
+ --color-rw-danger-text: #ffc7c2;
  --color-rw-info: #58a6ff;
 
  /* Radii: no pills on the dashboard */
@@ -139,6 +142,15 @@
 .dash-root h3 {
   font-family: var(--font-rw-serif);
   font-weight: 500;
+}
+
+/* Landing rhythm reset (ticket 03): base.css pads every <section> with
+   `clamp(64px, 11vh, 112px) var(--pad)` for the Creative Giants flow, but the
+   dashboard's <main> already carries the page padding, so that rule double-pads
+   each view. Reset inside .dash-root (base.css untouched, landing byte-identical
+   per ADR-0002). Targets view roots; a nested <section> would inherit it too. */
+.dash-root section {
+  padding: 0;
 }
 
 /* ------------------------------------------------------------------------
