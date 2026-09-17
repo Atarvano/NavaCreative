@@ -879,6 +879,10 @@
   let invSortKey = $state(null); // null = id desc (default terbaru)
   let invSortDesc = $state(true);
   let invTempo = $state('');
+  // Invoice whose bayar/tempo Panel is open (ticket 06). No-arg form snippets
+  // read this, matching briefTx: a snippet passed to the Panel as a value must
+  // not be pre-invoked with an argument (that yields a fragment, not a snippet).
+  let invForm = $state(null);
 
   const INV_STATUSES = ['unpaid', 'partial', 'paid', 'batal'];
 
@@ -943,11 +947,20 @@
     }
   }
 
-  // Bayar cepat primer (Q17): satu klik dari baris → buka expand langsung
-  // ke form bayar (lapis-dua), tak perlu Rincian dulu.
+  // Bayar cepat primer (Q17): satu klik dari baris → buka Panel bayar, tak
+  // perlu Rincian dulu. Rincian tetap riwayat-only (ticket 06).
   function bayarCepat(i) {
-    if (openInvoiceId !== i.id) bukaInvoice(i);
     byJumlah = i.sisa > 0 ? String(i.sisa) : '';
+    byTanggal = hariIniPlus(0);
+    invForm = i;
+    bukaPanel(`Catat bayar ${i.nomor}`, bayarFormSnippet);
+  }
+
+  // Ubah jatuh tempo dari rincian → Panel (ticket 06). Overdue turunan tempo.
+  function bukaTempo(i) {
+    invTempo = i.jatuh_tempo;
+    invForm = i;
+    bukaPanel(`Ubah tempo ${i.nomor}`, tempoFormSnippet);
   }
 
   // Ubah jatuh tempo via PATCH (redesign #57): full invoice balik → sync
@@ -955,34 +968,46 @@
   async function simpanTempo(i, e) {
     e.preventDefault();
     error = '';
-    const { res, data } = await api(`/api/invoice/${i.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ jatuh_tempo: invTempo }),
-    });
-    if (!res.ok) {
-      error = data.error ?? 'Gagal mengubah jatuh tempo.';
-      return;
+    busy = true;
+    try {
+      const { res, data } = await api(`/api/invoice/${i.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ jatuh_tempo: invTempo }),
+      });
+      if (!res.ok) {
+        error = data.error ?? 'Gagal mengubah jatuh tempo.';
+        return;
+      }
+      notice = `Tempo ${i.nomor} diubah ke ${tgl(data.jatuh_tempo)}.`;
+      invDetail = invDetail ? { ...invDetail, ...data } : invDetail;
+      tutupPanel();
+      await load();
+    } finally {
+      busy = false;
     }
-    notice = `Tempo ${i.nomor} diubah ke ${tgl(data.jatuh_tempo)}.`;
-    invDetail = invDetail ? { ...invDetail, ...data } : invDetail;
-    await load();
   }
 
   async function bayar(i, e) {
     e.preventDefault();
     error = '';
-    const { res, data } = await api(`/api/invoice/${i.id}/bayar`, {
-      method: 'POST',
-      body: JSON.stringify({ tanggal: byTanggal, jumlah: Number(byJumlah), metode: byMetode }),
-    });
-    if (!res.ok) {
-      error = data.error ?? 'Gagal mencatat pembayaran.';
-      return;
+    busy = true;
+    try {
+      const { res, data } = await api(`/api/invoice/${i.id}/bayar`, {
+        method: 'POST',
+        body: JSON.stringify({ tanggal: byTanggal, jumlah: Number(byJumlah), metode: byMetode }),
+      });
+      if (!res.ok) {
+        error = data.error ?? 'Gagal mencatat pembayaran.';
+        return;
+      }
+      notice = `Terbayar ${rupiah(data.dibayar)}, sisa ${rupiah(data.sisa)}.`;
+      byJumlah = '';
+      invDetail = invDetail ? { ...data, transaksi: invDetail.transaksi, baris: invDetail.baris ?? [] } : invDetail;
+      tutupPanel();
+      await load();
+    } finally {
+      busy = false;
     }
-    notice = `Terbayar ${rupiah(data.dibayar)}, sisa ${rupiah(data.sisa)}.`;
-    byJumlah = '';
-    invDetail = { ...data, transaksi: invDetail?.transaksi, baris: invDetail?.baris ?? [] };
-    await load();
   }
 
   async function voidInvoice(i) {
@@ -1316,6 +1341,9 @@
     // the 401 draft-stash from stashing a Brief the user already dismissed.
     briefOpenId = null;
     briefTx = null;
+    // Same for the Invoice bayar/tempo target: cleared so a dismissed Panel never
+    // re-renders a stale target form (ticket 06).
+    invForm = null;
   }
   // Backdrop click: the dialog's own box is the sheet, so a click whose target
   // is the dialog element itself landed outside the content and should close.
@@ -1330,24 +1358,16 @@
     return () => clearTimeout(t);
   });
 
-  // Chip status 3 warna + teks (Q11): hijau selesai, kuning berjalan,
-  // merah bahaya. Teks status tetap tampil di sebelah warna.
-  // Satu klasifikasi lifecycle dipakai bersama: palette light (landing-era
-  // views, ticket 04-06) dan palette rw dark memetakan kind yang SAMA.
+  // Chip status 3 warna + teks (Q11): hijau selesai/kuning berjalan/merah bahaya.
+  // Satu klasifikasi lifecycle dipakai bersama; `rwChip` memetakan kind ke palet
+  // Railway dark (ADR-0013 Q19). Nilai status dari data tetap apa adanya.
   const statusKind = (status, overdue = false) => {
     if (overdue || status === 'batal' || status === 'rejected') return 'danger';
     if (status === 'paid' || status === 'approved' || status === 'selesai') return 'ok';
     return 'neutral';
   };
-  const chipCls = (status, overdue = false) => {
-    const kind = statusKind(status, overdue);
-    if (kind === 'danger') return 'bg-magenta-bloom text-bone-white';
-    if (kind === 'ok') return 'bg-forest-teal text-bone-white';
-    return 'bg-signal-yellow text-ink-black';
-  };
-  // Chip status versi Railway (ADR-0013 Q19): teks terang di atas tint 15%,
-  // kontras >=7:1 pada permukaan charcoal #33323E tempat badge ini dirender.
-  // Nilai status dari data tetap apa adanya.
+  // Chip status versi Railway: teks terang di atas tint 15%, kontras >=7:1 pada
+  // permukaan charcoal #33323E tempat badge ini dirender.
   const rwChip = (status, overdue = false) => {
     const kind = statusKind(status, overdue);
     if (kind === 'danger') return 'bg-rw-danger/15 text-rw-danger-text';
@@ -1518,6 +1538,40 @@
   </form>
 {/snippet}
 
+<!-- Payment form body — rendered inside the Panel by bukaBayar() (ticket 06).
+     No-arg snippet reading `invForm` state, matching briefFormSnippet: a snippet
+     passed to the Panel as a value must not be pre-invoked with an argument.
+     Field set, bindings and the minus-is-correction rule are unchanged from the
+     previous inline form; only the container moved (ADR-0012 Detail Pattern).
+     The DP/Cicilan/Pelunasan label is derived server-side and shown in the
+     rincian's payment history, so it stays visible without the form. -->
+{#snippet bayarFormSnippet()}
+  {#if invForm}
+  <form class="grid gap-4" onsubmit={(e) => bayar(invForm, e)} data-inv-bayar-form>
+    <p class="text-body-sm text-rw-light-gray">
+      {invForm.nomor} · dibayar {rupiah(invForm.dibayar)} · sisa <span class={invForm.overdue ? 'text-rw-danger-text' : ''}>{rupiah(invForm.sisa)}</span>
+    </p>
+    <label class="grid gap-1 text-body-sm">Tanggal<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="date" required bind:value={byTanggal} /></label>
+    <label class="grid gap-1 text-body-sm">Jumlah (Rp, minus = koreksi)<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" step="1" required bind:value={byJumlah} /></label>
+    <label class="grid gap-1 text-body-sm">Metode<select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={byMetode}><option value="transfer">transfer</option><option value="cash">cash</option></select></label>
+    <button class="rounded-rw-control bg-rw-accent px-6 py-2.5 text-body-sm text-rw-white disabled:opacity-50 max-md:py-3 max-md:w-full" type="submit" disabled={busy}>{busy ? 'Menyimpan…' : 'Catat bayar'}</button>
+  </form>
+  {/if}
+{/snippet}
+
+<!-- Tempo form body — rendered inside the Panel by bukaTempo() (ticket 06).
+     No-arg snippet reading `invForm`; PATCH body unchanged; overdue is derived
+     from jatuh_tempo, so it follows. -->
+{#snippet tempoFormSnippet()}
+  {#if invForm}
+  <form class="grid gap-4" onsubmit={(e) => simpanTempo(invForm, e)} data-inv-tempo-form>
+    <p class="text-body-sm text-rw-light-gray">{invForm.nomor} · jatuh tempo sekarang {tgl(invForm.jatuh_tempo)}</p>
+    <label class="grid gap-1 text-body-sm">Jatuh tempo<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="date" required bind:value={invTempo} /></label>
+    <button class="rounded-rw-control border border-rw-border-gray/40 px-6 py-2.5 text-body-sm max-md:py-3 max-md:w-full" type="submit" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan tempo'}</button>
+  </form>
+  {/if}
+{/snippet}
+
 {#snippet txRow(t)}
   <tr class="border-b border-rw-border-gray/40 align-top scroll-mt-24 {openTransaksiId === t.id ? 'bg-rw-darker' : ''}">
     <td class="px-3 py-2 max-md:py-3">
@@ -1622,62 +1676,58 @@
 {/snippet}
 
 {#snippet invRow(i)}
-  <tr class="border-b border-ash align-top scroll-mt-24 {openInvoiceId === i.id ? 'bg-canvas' : ''}">
-    <td class="px-3 py-3 whitespace-nowrap">{i.nomor}</td>
-    <td class="px-3 py-3"><p class="text-body font-normal">{invClient(i) || '—'}</p></td>
-    <td class="px-3 py-3 text-right">{rupiah(i.total)}</td>
-    <td class="px-3 py-3 text-right">{rupiah(i.dibayar)}</td>
+  <tr class="border-b border-rw-border-gray/40 align-top scroll-mt-24 {openInvoiceId === i.id ? 'bg-rw-darker' : ''}">
+    <td class="px-3 py-2 whitespace-nowrap max-md:py-3">{i.nomor}</td>
+    <td class="px-3 py-2 max-md:py-3"><p class="text-body font-normal">{invClient(i) || '-'}</p></td>
+    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3">{rupiah(i.total)}</td>
+    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3">{rupiah(i.dibayar)}</td>
     <!-- Sisa bold saat overdue (Q17) biar yang ditagih paling menonjol. -->
-    <td class="px-3 py-3 text-right {i.overdue ? 'font-medium' : ''}">{rupiah(i.sisa)}</td>
-    <td class="px-3 py-3 whitespace-nowrap">{tgl(i.jatuh_tempo)}</td>
-    <td class="px-3 py-3"><span class="rounded-pill px-3 py-1 text-caption {chipCls(i.status, i.overdue)}">{i.status}{i.overdue ? ' · overdue' : ''}</span></td>
-    <td class="px-3 py-3">
-      <div class="flex flex-wrap justify-end gap-3">
+    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3 {i.overdue ? 'font-medium text-rw-danger-text' : ''}">{rupiah(i.sisa)}</td>
+    <td class="px-3 py-2 whitespace-nowrap max-md:py-3">{tgl(i.jatuh_tempo)}</td>
+    <td class="px-3 py-2 max-md:py-3"><span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(i.status, i.overdue)}">{i.status}{i.overdue ? ' · overdue' : ''}</span></td>
+    <td class="px-3 py-2 max-md:py-3">
+      <div class="flex flex-wrap items-center justify-end gap-3">
         {#if i.status !== 'paid' && i.status !== 'batal'}
-          <button class="underline scroll-mt-32" onclick={() => bayarCepat(i)} data-inv-bayar>Bayar</button>
+          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bayarCepat(i)} data-inv-bayar>Bayar</button>
         {/if}
-        <button class="underline scroll-mt-32" onclick={() => bukaInvoice(i)}>{openInvoiceId === i.id ? 'Tutup' : 'Rincian'}</button>
+        <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bukaInvoice(i)}>{openInvoiceId === i.id ? 'Tutup' : 'Rincian'}</button>
       </div>
     </td>
   </tr>
   {#if openInvoiceId === i.id}
-  <tr class="bg-canvas"><td colspan="8" class="px-3 py-4">
+  <tr class="bg-rw-darker"><td colspan="8" class="px-3 py-4">
     {#if invDetail}
-      <!-- Riwayat bayar: tanggal + label DP/Cicilan/Pelunasan + metode (B3). -->
-      <p class="text-caption uppercase text-graphite">Riwayat pembayaran — dibayar {rupiah(i.dibayar)} · sisa {rupiah(i.sisa)}</p>
+      <!-- Riwayat bayar ringan (ticket 06): read-only, tetap terlihat. Label
+           DP/Cicilan/Pelunasan datang dari server (derived), tampil apa adanya.
+           Form bayar + ubah tempo pindah ke Panel (tombol di bawah). -->
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <p class="text-caption uppercase text-rw-light-gray">Riwayat pembayaran</p>
+        <p class="text-body-sm text-rw-light-gray">dibayar {rupiah(i.dibayar)} · sisa {rupiah(i.sisa)}</p>
+      </div>
       {#if invDetail.bayar.length}
         <ul class="mt-2 grid gap-1 text-body-sm">
           {#each invDetail.bayar as p (p.id)}
-            <li class="flex justify-between gap-2"><span>{tgl(p.tanggal)} ({p.label}) — {p.metode}</span><span>{rupiah(p.jumlah)}</span></li>
+            <li class="flex justify-between gap-2"><span>{tgl(p.tanggal)} ({p.label}) · {p.metode}</span><span class="tabular-nums">{rupiah(p.jumlah)}</span></li>
           {/each}
         </ul>
       {:else}
-        <p class="mt-2 text-body-sm text-graphite">Belum ada pembayaran.</p>
+        <p class="mt-2 text-body-sm text-rw-light-gray">Belum ada pembayaran.</p>
       {/if}
 
-      <!-- Form bayar lapis-dua (Q18); minus = koreksi (M1); batal → terkunci. -->
-      {#if i.status !== 'batal'}
-        <form class="mt-4 grid gap-3 border-t border-ash pt-4 max-md:grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end" onsubmit={(e) => bayar(i, e)} data-inv-bayar-form>
-          <p class="text-body font-normal md:col-span-4">Catat pembayaran</p>
-          <label class="grid gap-1 text-body-sm">Tanggal<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" required bind:value={byTanggal} /></label>
-          <label class="grid gap-1 text-body-sm">Jumlah (Rp, minus = koreksi)<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="number" step="1" required bind:value={byJumlah} /></label>
-          <label class="grid gap-1 text-body-sm">Metode<select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={byMetode}><option value="transfer">transfer</option><option value="cash">cash</option></select></label>
-          <button class="rounded-pill bg-navy-ink px-5 py-2 text-body-sm text-bone-white max-md:w-full" type="submit">Catat bayar</button>
-        </form>
-
-        <!-- Ubah jatuh tempo via PATCH (redesign #57); overdue ikut turunan. -->
-        <form class="mt-4 grid gap-3 border-t border-ash pt-4 max-md:grid-cols-1 md:grid-cols-[1fr_auto] md:items-end" onsubmit={(e) => simpanTempo(i, e)} data-inv-tempo-form>
-          <label class="grid gap-1 text-body-sm">Jatuh tempo<input class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" type="date" required bind:value={invTempo} /></label>
-          <button class="rounded-pill border border-ash px-5 py-2 text-body-sm max-md:w-full" type="submit">Simpan tempo</button>
-        </form>
-      {:else}
-        <p class="mt-4 border-t border-ash pt-4 text-body-sm text-graphite">Invoice dibatalkan — pembayaran & tempo terkunci, riwayat tetap tersimpan.</p>
+      {#if i.status === 'batal'}
+        <p class="mt-3 text-body-sm text-rw-light-gray">Invoice dibatalkan, pembayaran & tempo terkunci, riwayat tetap tersimpan.</p>
       {/if}
 
-      <div class="mt-4 flex flex-wrap gap-4 text-body-sm">
-        <button class="underline" onclick={printInvoice}>Cetak</button>
+      <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
         {#if i.status !== 'paid' && i.status !== 'batal'}
-          <button class="underline" onclick={() => voidInvoice(i)}>Batalkan</button>
+          <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bayarCepat(i)} data-inv-bayar-detail>Catat bayar</button>
+        {/if}
+        {#if i.status !== 'batal'}
+          <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bukaTempo(i)} data-inv-tempo-toggle>Ubah tempo</button>
+        {/if}
+        <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={printInvoice}>Cetak</button>
+        {#if i.status !== 'paid' && i.status !== 'batal'}
+          <button class="underline text-rw-danger-text max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => voidInvoice(i)}>Batalkan</button>
         {/if}
       </div>
     {:else}
@@ -2208,11 +2258,11 @@
       <h2 class="text-subheading font-normal">Invoice</h2>
       {#if !invoices.length}
         <!-- Empty state: satu baris + CTA (Q34). -->
-        <p class="mt-4 text-body-sm text-graphite">Belum ada invoice. Terbitkan dari Transaksi lewat tombol “Terbitkan invoice”.</p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Belum ada invoice. Terbitkan dari Transaksi lewat tombol “Terbitkan invoice”.</p>
       {:else}
       <div class="mt-4 flex flex-wrap gap-3">
-        <input class="min-w-40 flex-1 rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" placeholder="Cari nomor / client" bind:value={invSearch} data-inv-search />
-        <select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={invStatusFilter} data-inv-status>
+        <input class="min-w-40 flex-1 rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm placeholder:text-rw-light-gray max-md:py-3" placeholder="Cari nomor / client" bind:value={invSearch} data-inv-search />
+        <select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm max-md:py-3" bind:value={invStatusFilter} data-inv-status>
           <option value="semua">semua status</option>
           {#each INV_STATUSES as s (s)}<option value={s}>{s}</option>{/each}
           <option value="overdue">overdue</option>
@@ -2221,12 +2271,14 @@
 
       {#if !invFiltered.length}
         <!-- Filter-miss beda dari empty: tawarkan reset (Q34). -->
-        <p class="mt-4 text-body-sm text-graphite">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { invSearch = ''; invStatusFilter = 'semua'; }}>Reset</button></p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { invSearch = ''; invStatusFilter = 'semua'; }}>Reset</button></p>
       {:else}
-      <div class="mt-4 overflow-x-auto">
+      <!-- Rail table (ticket 06): dense on desktop, comfortable on mobile, money
+           columns right-aligned with tabular-nums. Same pattern as Transaksi/RAB. -->
+      <div class="mt-4 overflow-x-auto rounded-rw-card border border-rw-border-gray/40">
         <table class="w-full min-w-[720px] border-collapse text-body-sm">
-          <thead class="bg-bone-white md:sticky md:top-0">
-            <tr class="border-b border-ash text-left">
+          <thead class="bg-rw-charcoal md:sticky md:top-0">
+            <tr class="border-b border-rw-border-gray/40 text-left text-rw-light-gray">
               <th class="px-3 py-2 font-normal">Nomor</th>
               <th class="px-3 py-2 font-normal">Client</th>
               <th class="px-3 py-2 text-right font-normal"><button class="underline {invSortKey === 'total' ? 'font-medium' : ''}" onclick={() => invUrutkan('total')}>Total {invSortKey === 'total' ? (invSortDesc ? '↓' : '↑') : ''}</button></th>
