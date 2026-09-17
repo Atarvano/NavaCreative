@@ -363,8 +363,8 @@
       const drafRab = ambilDraft('rab');
       if (draftAda(drafRab)) {
         rbMuatDraft(drafRab);
-        rabBuilderOpen = true;
-        notice = 'Draft RAB terselamatkan dari sesi sebelumnya — builder dibuka kembali.';
+        // Draft is seeded into state; the Panel opens from “+ RAB baru” (ticket 05).
+        notice = 'Draft RAB terselamatkan dari sesi sebelumnya, buka “+ RAB baru” untuk lanjut.';
       }
       await tampilkan(viewDariHash() ?? 'ringkasan');
     } catch {
@@ -483,9 +483,9 @@
     location.href = 'login.html';
   }
 
-  // --- RAB builder (#56): di balik tombol +, pola sama seperti walk-in ---
-  // Builder di balik + (Q23); satu flag draft, bukan field-diffing.
-  let rabBuilderOpen = $state(false);
+  // --- RAB builder (#56): now opens in the shared Panel (ticket 05) ---
+  // Behaviour unchanged; the Panel owns closing (Esc / outside click / button).
+  // `rabBuilderOpen` was the inline-open flag and is gone.
 
   function resetBuilder() {
     rbProject = '';
@@ -511,13 +511,13 @@
     rbBaris = d.baris ?? [];
   };
 
-  // Tombol + membuka builder; draft tersimpan dibuka kembali + notice (Q23).
+  // Builder opens in the Panel; a stashed draft is re-seeded first + notice (Q23).
   function bukaRabBuilder() {
-    rabBuilderOpen = !rabBuilderOpen;
-    if (rabBuilderOpen && draftAda(ambilDraft('rab'))) {
+    if (draftAda(ambilDraft('rab'))) {
       rbMuatDraft(ambilDraft('rab'));
       notice = 'Draft RAB sebelumnya dibuka kembali.';
     }
+    bukaPanel('RAB baru', rabBuilderSnippet);
   }
 
   // Buat RAB dari Paket (Q19/Q21): salin baris → auto-pindah #/rab + notice.
@@ -533,9 +533,16 @@
     rbProject = data.nama_project;
     rbBaris = data.baris.map((b) => ({ ...b }));
     hapusDraft('rab');
-    rabBuilderOpen = true;
-    notice = `Baris ${p.nama} disalin — lengkapi client lalu simpan.`;
-    go('rab');
+    notice = `Baris ${p.nama} disalin, lengkapi client lalu simpan.`;
+    // Open the Panel AFTER the view switch: go('rab') fires hashchange ->
+    // tampilkan() -> tutupPanel(), so a direct bukaPanel() here would be closed
+    // again immediately. pendingPanel is consumed by tampilkan() once on #/rab;
+    // when already on #/rab (re-copy), the hash does not change, so open directly.
+    if (view === 'rab') bukaRabBuilder();
+    else {
+      pendingPanel = { view: 'rab', judul: 'RAB baru', isi: rabBuilderSnippet };
+      go('rab');
+    }
   }
 
   function tambahBaris(e) {
@@ -589,7 +596,7 @@
       notice = `${data.nomor} tersimpan sebagai draft.`;
       resetBuilder();
       hapusDraft('rab');
-      rabBuilderOpen = false;
+      tutupPanel();
       await load();
     } finally {
       busy = false;
@@ -1115,6 +1122,12 @@
   // tak pernah dari markup/$derived — jangan dipakai reaktif.
   let lompatExpand = null;
 
+  // Cross-view Panel open (ticket 05): `dariPaket` switches to #/rab and wants the
+  // RAB builder Panel open there. `tampilkan()` closes the Panel on every view
+  // change, so the open has to happen AFTER that reset — this one-shot carries it,
+  // consumed by tampilkan() once the view has switched. Imperative, never reactive.
+  let pendingPanel = null;
+
   async function tampilkan(v) {
     if (!VIEW_KEYS.includes(v)) v = 'ringkasan';
     view = v;
@@ -1154,6 +1167,15 @@
     if (v === 'ringkasan') {
       const { res, data } = await api('/api/ringkasan');
       if (res.ok) ringkasan = data;
+    }
+    // Cross-view Panel open (ticket 05): consumed after the reset above so the
+    // Panel is not closed again by this same tampilkan() call. Clear it whichever
+    // view lands, so a redirected/missed switch can never leave a stale one-shot
+    // that pops the Panel on a later unrelated #/rab visit.
+    if (pendingPanel) {
+      const { view: wantView, judul, isi } = pendingPanel;
+      pendingPanel = null;
+      if (wantView === v) bukaPanel(judul, isi);
     }
     if (v === 'settings') setForm = { ...settings };
   }
@@ -1418,6 +1440,84 @@
   {/if}
 {/snippet}
 
+<!-- RAB builder body — rendered inside the Panel by bukaRabBuilder() (ticket 05).
+     Behaviour is unchanged from the previous inline form (dari-Paket copy, add/
+     remove baris, subtotal, flat total); only the container moved, per ADR-0012's
+     Detail Pattern hybrid. Field set and bindings stay the same. -->
+{#snippet rabBuilderSnippet()}
+  <form class="grid gap-4" onsubmit={simpanRab} data-rab-form>
+    <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
+      <label class="grid gap-1 text-body-sm">
+        Nama project
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" name="rb_project" required bind:value={rbProject} placeholder="Paket Nikahan" />
+      </label>
+      <label class="grid gap-1 text-body-sm">
+        Tanggal RAB
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="date" required bind:value={rbTanggal} />
+      </label>
+      <label class="grid gap-1 text-body-sm">
+        Nama client
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" name="rb_client" required bind:value={rbClient} placeholder="Soleh Permana" />
+      </label>
+      <label class="grid gap-1 text-body-sm">
+        Perusahaan (opsional)
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={rbPerusahaan} />
+      </label>
+    </div>
+    {#if rbBaris.length}
+      <ul class="grid gap-1 text-body-sm">
+        {#each rbBaris as b, i (i)}
+          <li class="flex justify-between gap-2">
+            <span>{b.nama} × {b.qty} {b.satuan} <span class="text-rw-light-gray">[{b.jenis}]</span></span>
+            <span>{rupiah(b.qty * b.harga_satuan)} <button type="button" class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => hapusBaris(i)}>hapus</button></span>
+          </li>
+        {/each}
+      </ul>
+      <p class="text-body-sm">Subtotal {rupiah(rbSum())}</p>
+    {:else}
+      <p class="text-body-sm text-rw-light-gray">Belum ada baris, salin dari paket lewat tombol “Buat RAB”, atau tambah manual di bawah.</p>
+    {/if}
+    <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] md:items-end">
+      <label class="grid gap-1 text-body-sm">
+        Item
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={nbNama} placeholder="Live Streaming 2 camera" />
+      </label>
+      <label class="grid gap-1 text-body-sm">
+        Jenis
+        <select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={nbJenis}>
+          <option value="alat">alat</option>
+          <option value="jasa">jasa</option>
+          <option value="biaya">biaya</option>
+        </select>
+      </label>
+      <label class="grid gap-1 text-body-sm">
+        Qty
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" min="1" step="1" bind:value={nbQty} />
+      </label>
+      <label class="grid gap-1 text-body-sm">
+        Satuan
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={nbSatuan} placeholder="Hari" />
+      </label>
+      <label class="grid gap-1 text-body-sm">
+        Harga (Rp)
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" min="0" step="1" bind:value={nbHarga} />
+      </label>
+      <button type="button" class="rounded-rw-control border border-rw-border-gray/40 px-5 py-2.5 text-body-sm max-md:py-3 max-md:w-full" onclick={tambahBaris}>+ Baris</button>
+    </div>
+    <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[1fr_2fr_auto] md:items-end">
+      <label class="grid gap-1 text-body-sm">
+        Diskon (Rp)
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" min="0" step="1" bind:value={rbDiskon} placeholder="0" />
+      </label>
+      <label class="grid gap-1 text-body-sm">
+        Catatan
+        <input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={rbCatatan} placeholder="Include file edit" />
+      </label>
+      <button class="rounded-rw-control bg-rw-accent px-6 py-2.5 text-body-sm text-rw-white disabled:opacity-50 md:justify-self-start max-md:py-3 max-md:w-full" type="submit" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan draft'}</button>
+    </div>
+  </form>
+{/snippet}
+
 {#snippet txRow(t)}
   <tr class="border-b border-rw-border-gray/40 align-top scroll-mt-24 {openTransaksiId === t.id ? 'bg-rw-darker' : ''}">
     <td class="px-3 py-2 max-md:py-3">
@@ -1448,7 +1548,7 @@
   <tr class="bg-rw-darker"><td colspan="6" class="px-3 py-4">
     <div class="grid gap-2">
       {#each txGrup(t) as g (g.kategori)}
-        <p class="text-caption uppercase text-rw-light-gray">{g.kategori} — subtotal {rupiah(g.subtotal)}</p>
+        <p class="text-caption uppercase text-rw-light-gray">{g.kategori}: subtotal {rupiah(g.subtotal)}</p>
         <ul class="grid gap-1 text-body-sm">
           {#each g.baris as b (b.id)}
             <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-rw-light-gray">[{b.jenis}]</span></span><span class="tabular-nums">{rupiah(b.qty * b.harga_satuan)}</span></li>
@@ -1468,42 +1568,42 @@
 {/snippet}
 
 {#snippet rabRow(r)}
-  <tr class="border-b border-ash align-top scroll-mt-24 {openRabId === r.id ? 'bg-canvas' : ''}">
-    <td class="px-3 py-3 whitespace-nowrap">{r.nomor}</td>
-    <td class="px-3 py-3"><p class="text-body font-normal">{r.nama_project}</p></td>
-    <td class="px-3 py-3">
+  <tr class="border-b border-rw-border-gray/40 align-top scroll-mt-24 {openRabId === r.id ? 'bg-rw-darker' : ''}">
+    <td class="px-3 py-2 whitespace-nowrap max-md:py-3">{r.nomor}</td>
+    <td class="px-3 py-2 max-md:py-3"><p class="text-body font-normal">{r.nama_project}</p></td>
+    <td class="px-3 py-2 max-md:py-3">
       {r.nama_client}
-      {#if r.perusahaan_client}<p class="text-caption text-graphite">{r.perusahaan_client}</p>{/if}
+      {#if r.perusahaan_client}<p class="text-caption text-rw-light-gray">{r.perusahaan_client}</p>{/if}
     </td>
-    <td class="px-3 py-3 text-right">{rupiah(r.total)}</td>
-    <td class="px-3 py-3"><span class="rounded-pill px-3 py-1 text-caption {chipCls(r.status)}">{r.status}</span></td>
-    <td class="px-3 py-3">
-      <div class="flex flex-wrap justify-end gap-3">
+    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3">{rupiah(r.total)}</td>
+    <td class="px-3 py-2 max-md:py-3"><span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(r.status)}">{r.status}</span></td>
+    <td class="px-3 py-2 max-md:py-3">
+      <div class="flex flex-wrap items-center justify-end gap-3">
         {#if r.status === 'draft'}
-          <button class="underline scroll-mt-32" onclick={() => statusRab(r, 'sent')}>Kirim</button>
+          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => statusRab(r, 'sent')}>Kirim</button>
         {:else if r.status === 'sent'}
-          <button class="underline scroll-mt-32" onclick={() => setujui(r)}>Setujui</button>
+          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => setujui(r)}>Setujui</button>
         {/if}
-        <button class="underline scroll-mt-32" onclick={() => (openRabId = openRabId === r.id ? null : r.id)}>{openRabId === r.id ? 'Tutup' : 'Rincian'}</button>
+        <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => (openRabId = openRabId === r.id ? null : r.id)}>{openRabId === r.id ? 'Tutup' : 'Rincian'}</button>
       </div>
     </td>
   </tr>
   {#if openRabId === r.id}
-  <tr class="bg-canvas"><td colspan="6" class="px-3 py-4">
+  <tr class="bg-rw-darker"><td colspan="6" class="px-3 py-4">
     <div class="grid gap-2">
       {#each rabGrup(r) as g (g.kategori)}
-        <p class="text-caption uppercase text-graphite">{g.kategori} — subtotal {rupiah(g.subtotal)}</p>
+        <p class="text-caption uppercase text-rw-light-gray">{g.kategori}: subtotal {rupiah(g.subtotal)}</p>
         <ul class="grid gap-1 text-body-sm">
           {#each g.baris as b (b.id)}
-            <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)}</span></li>
+            <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-rw-light-gray">[{b.jenis}]</span></span><span class="tabular-nums">{rupiah(b.qty * b.harga_satuan)}</span></li>
           {/each}
         </ul>
       {/each}
-      {#if !rabGrup(r).length}<p class="text-body-sm text-graphite">Tanpa baris.</p>{/if}
+      {#if !rabGrup(r).length}<p class="text-body-sm text-rw-light-gray">Tanpa baris.</p>{/if}
       <p class="text-body-sm">
         {#if r.diskon}Diskon −{rupiah(r.diskon)} · {/if}<span class="font-normal">Total {rupiah(r.total)}</span>
       </p>
-      {#if r.catatan}<p class="text-body-sm text-graphite">Catatan: {r.catatan}</p>{/if}
+      {#if r.catatan}<p class="text-body-sm text-rw-light-gray">Catatan: {r.catatan}</p>{/if}
     </div>
     <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
       {#if r.status === 'sent'}
@@ -1925,7 +2025,7 @@
               {#if openPaketId === p.id}
                 <div class="mt-3 border-t border-ash pt-3">
                   {#each paketGrup(p) as g (g.kategori)}
-                    <p class="mt-2 text-caption uppercase text-graphite">{g.kategori} — subtotal {rupiah(g.subtotal)}</p>
+                    <p class="mt-2 text-caption uppercase text-graphite">{g.kategori}: subtotal {rupiah(g.subtotal)}</p>
                     <ul class="grid gap-1 text-body-sm">
                       {#each g.baris as b (b.id)}
                         <li class="flex justify-between gap-2">
@@ -2010,103 +2110,31 @@
     <section class="mt-8" data-view="rab">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-subheading font-normal">RAB</h2>
-        <button class="rounded-pill bg-navy-ink px-5 py-3 text-body-sm text-bone-white" onclick={bukaRabBuilder} data-rab-toggle>
-          {rabBuilderOpen ? 'Tutup' : '+ RAB baru'}
+        <button class="rounded-rw-control bg-rw-accent px-5 py-2.5 text-body-sm text-rw-white max-md:py-3" onclick={bukaRabBuilder} data-rab-toggle>
+          + RAB baru
         </button>
       </div>
 
-      {#if rabBuilderOpen}
-      <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4" onsubmit={simpanRab} data-rab-form>
-        <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
-          <label class="grid gap-1 text-body-sm">
-            Nama project
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="rb_project" required bind:value={rbProject} placeholder="Paket Nikahan" />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Tanggal RAB
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="date" required bind:value={rbTanggal} />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Nama client
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="rb_client" required bind:value={rbClient} placeholder="Soleh Permana" />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Perusahaan (opsional)
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={rbPerusahaan} />
-          </label>
-        </div>
-        {#if rbBaris.length}
-          <ul class="grid gap-1 text-body-sm">
-            {#each rbBaris as b, i (i)}
-              <li class="flex justify-between gap-2">
-                <span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis}]</span></span>
-                <span>{rupiah(b.qty * b.harga_satuan)} <button type="button" class="underline" onclick={() => hapusBaris(i)}>hapus</button></span>
-              </li>
-            {/each}
-          </ul>
-          <p class="text-body-sm">Subtotal {rupiah(rbSum())}</p>
-        {:else}
-          <p class="text-body-sm text-graphite">Belum ada baris — salin dari paket lewat tombol “Buat RAB”, atau tambah manual di bawah.</p>
-        {/if}
-        <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] md:items-end">
-          <label class="grid gap-1 text-body-sm">
-            Item
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={nbNama} placeholder="Live Streaming 2 camera" />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Jenis
-            <select class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={nbJenis}>
-              <option value="alat">alat</option>
-              <option value="jasa">jasa</option>
-              <option value="biaya">biaya</option>
-            </select>
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Qty
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="1" step="1" bind:value={nbQty} />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Satuan
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={nbSatuan} placeholder="Hari" />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Harga (Rp)
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="0" step="1" bind:value={nbHarga} />
-          </label>
-          <button type="button" class="rounded-pill border border-ash px-5 py-3 text-body-sm max-md:w-full" onclick={tambahBaris}>+ Baris</button>
-        </div>
-        <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[1fr_2fr_auto] md:items-end">
-          <label class="grid gap-1 text-body-sm">
-            Diskon (Rp)
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="0" step="1" bind:value={rbDiskon} placeholder="0" />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Catatan
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={rbCatatan} placeholder="Include file edit" />
-          </label>
-          <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white disabled:opacity-50 md:justify-self-start max-md:w-full" type="submit" disabled={busy}>{busy ? '…' : 'Simpan draft'}</button>
-        </div>
-      </form>
-      {/if}
-
       {#if !rabs.length}
-        <p class="mt-4 text-body-sm text-graphite">Belum ada RAB. Mulai lewat tombol “+ RAB baru” di atas, atau salin dari Paket lewat “Buat RAB”.</p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Belum ada RAB. Mulai lewat tombol “+ RAB baru” di atas, atau salin dari Paket lewat “Buat RAB”.</p>
       {:else}
       <div class="mt-4 flex flex-wrap gap-3">
-        <input class="min-w-40 flex-1 rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" placeholder="Cari nomor / project / client" bind:value={rabSearch} data-rab-search />
-        <select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={rabStatusFilter} data-rab-status>
+        <input class="min-w-40 flex-1 rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm placeholder:text-rw-light-gray max-md:py-3" placeholder="Cari nomor / project / client" bind:value={rabSearch} data-rab-search />
+        <select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm max-md:py-3" bind:value={rabStatusFilter} data-rab-status>
           <option value="semua">semua status</option>
           {#each RAB_STATUSES as s (s)}<option value={s}>{s}</option>{/each}
         </select>
       </div>
 
       {#if !rabFiltered.length}
-        <p class="mt-4 text-body-sm text-graphite">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { rabSearch = ''; rabStatusFilter = 'semua'; }}>Reset</button></p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { rabSearch = ''; rabStatusFilter = 'semua'; }}>Reset</button></p>
       {:else}
-      <div class="mt-4 overflow-x-auto">
+      <!-- Rail table (ticket 05): dense on desktop, comfortable on mobile. Same
+           pattern as the Transaksi table (ticket 04). -->
+      <div class="mt-4 overflow-x-auto rounded-rw-card border border-rw-border-gray/40">
         <table class="w-full min-w-[640px] border-collapse text-body-sm">
-          <thead class="bg-bone-white md:sticky md:top-0">
-            <tr class="border-b border-ash text-left">
+          <thead class="bg-rw-charcoal md:sticky md:top-0">
+            <tr class="border-b border-rw-border-gray/40 text-left text-rw-light-gray">
               <th class="px-3 py-2 font-normal">Nomor</th>
               <th class="px-3 py-2 font-normal">Project</th>
               <th class="px-3 py-2 font-normal">Client</th>
