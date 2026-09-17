@@ -87,6 +87,17 @@
  --color-rw-accent: #9d4edd;
  --color-rw-accent-subtle: #7c3aed;
 
+ /* Status text variants (ADR-0013 Q19, AA-verified on #13111C). Kept as named
+    tokens so badges never hand-pick a hex. Backgrounds are laid on with an
+    alpha of the base colour; text uses the lighter variant for contrast. */
+ --color-rw-ok: #3fb950;
+ --color-rw-ok-text: #56d364;
+ --color-rw-warn: #d29922;
+ --color-rw-warn-text: #e3b341;
+ --color-rw-danger: #f85149;
+ --color-rw-danger-text: #ff7b72;
+ --color-rw-info: #58a6ff;
+
  /* Radii: no pills on the dashboard */
  --radius-rw-control: 6px; /* buttons, inputs */
  --radius-rw-card: 8px; /* cards, panel */
@@ -128,4 +139,45 @@
 .dash-root h3 {
   font-family: var(--font-rw-serif);
   font-weight: 500;
+}
+
+/* ------------------------------------------------------------------------
+   Panel (ticket 02) — the native <dialog> is only the modal shell; the sheet
+   inside is the visible surface. Strip the UA dialog chrome (border, margin,
+   max-width) so the sheet controls its own size. Scoped to .dash-root so the
+   class names can never reach the shared landing/login sheets (ADR-0002).
+   ------------------------------------------------------------------------ */
+.dash-root .panel::backdrop {
+  background: rgb(8 7 12 / 0.7); /* rw-darker at 70% */
+}
+
+/* ------------------------------------------------------------------------
+   Skeleton (ticket 02) — CSS-only loading placeholder. A neutral bar on the
+   charcoal surface; the shimmer is `background-position` only, and it is gated
+   behind prefers-reduced-motion so a reduced-motion user keeps a static bar.
+   Scoped to .dash-root (dashboard-only helper class).
+   ------------------------------------------------------------------------ */
+.dash-root .skeleton-bar {
+  background: linear-gradient(
+    90deg,
+    rgb(161 160 171 / 0.08) 0%,
+    rgb(161 160 171 / 0.18) 50%,
+    rgb(161 160 171 / 0.08) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dash-root .skeleton-bar {
+    animation: rw-skeleton 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes rw-skeleton {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
