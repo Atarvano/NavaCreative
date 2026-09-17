@@ -79,21 +79,18 @@
   // Per-paket expandable rows (#42: read-only rows + subtotals).
   let openPaketId = $state(null);
 
-  // --- Redesign 07 (#60): Paket CRUD UI — tambah di balik +, ubah = form
-  // terisi baris lama (PATCH wholesale), expand grup kategori + subtotal,
-  // Buat RAB tetap. Tanpa DELETE (spirit B4): arsipkan bila perlu.
-  let paketBuilderOpen = $state(false);
-  let editPaketId = $state(null); // id paket yang sedang diubah (lapis-dua)
+  // --- Redesign 07 (#60, ticket 07): Paket CRUD — add + edit both open in the
+  // shared Panel (ADR-0012 amendment). One builder snippet serves both modes;
+  // a heavyweight form lives in the Panel, not inline. Expand grup kategori +
+  // subtotal stays in the card, and "Buat RAB" (dariPaket) is unchanged.
+  let pkMode = $state('add'); // 'add' | 'edit'
+  let pkTarget = $state(null); // the paket being edited in 'edit' mode
 
-  // Form tambah (builder) — field header + baris sementara.
+  // Header fields shared by both modes (seeded from the target when editing).
   let pkNama = $state('');
   let pkDeskripsi = $state('');
   let pkBaris = $state([]);
-  // Form ubah — baris paket lama disalin ke sini, lalu PATCH wholesale.
-  let pkEditNama = $state('');
-  let pkEditDeskripsi = $state('');
-  let pkEditBaris = $state([]);
-  // Input baris baru (dipakai tambah + ubah; disalin ke array saat + Baris).
+  // Input baris baru (dipakai add + edit; disalin ke array saat + Baris).
   let pbNama = $state('');
   let pbQty = $state('1');
   let pbSatuan = $state('');
@@ -110,30 +107,29 @@
     pbKategori = 'PRODUCTION';
   };
 
-  // Tombol + membuka form tambah; tutup = buang isian (pola Alat/RAB, Q23).
+  const pkReset = () => {
+    pkNama = '';
+    pkDeskripsi = '';
+    pkBaris = [];
+    resetPkInput();
+  };
+
+  // + Paket baru: open the Panel in add mode, blank fields.
   function bukaPaketBuilder() {
-    paketBuilderOpen = !paketBuilderOpen;
-    editPaketId = null; // tutup form ubah biar satu kerjaan satu waktu
-    if (!paketBuilderOpen) {
-      pkNama = '';
-      pkDeskripsi = '';
-      pkBaris = [];
-      resetPkInput();
-    }
+    pkMode = 'add';
+    pkTarget = null;
+    pkReset();
+    bukaPanel('Paket baru', paketBuilderSnippet);
   }
 
-  // Ubah (lapis-dua di dalam kartu): salin baris lama — PATCH mengganti
-  // wholesale, jadi form harus mulai dari snapshot baris yang ada.
+  // Ubah: open the Panel in edit mode, seeded from a snapshot of the paket's rows
+  // (PATCH replaces wholesale, so the form must start from the current rows).
   function bukaEditPaket(p) {
-    if (editPaketId === p.id) {
-      editPaketId = null;
-      return;
-    }
-    editPaketId = p.id;
-    paketBuilderOpen = false; // tutup form tambah
-    pkEditNama = p.nama;
-    pkEditDeskripsi = p.deskripsi ?? '';
-    pkEditBaris = p.baris.map((b) => ({
+    pkMode = 'edit';
+    pkTarget = p;
+    pkNama = p.nama;
+    pkDeskripsi = p.deskripsi ?? '';
+    pkBaris = p.baris.map((b) => ({
       kategori: b.kategori,
       jenis: b.jenis,
       alat_id: b.alat_id ?? null,
@@ -143,14 +139,15 @@
       harga_satuan: b.harga_satuan,
     }));
     resetPkInput();
+    bukaPanel(`Ubah paket: ${p.nama}`, paketBuilderSnippet);
   }
 
   // + Baris: validasi ringan sisi-UI (kontrak penuh tetap di API, Q12).
-  function pkTambahBaris(daftar, setDaftar) {
+  function pkTambahBaris() {
     const namaBaris = pbNama.trim();
     if (!namaBaris) return;
-    setDaftar([
-      ...daftar,
+    pkBaris = [
+      ...pkBaris,
       {
         kategori: pbKategori || 'PRODUCTION',
         jenis: pbJenis,
@@ -160,58 +157,37 @@
         satuan: pbSatuan,
         harga_satuan: Number(pbHarga) || 0,
       },
-    ]);
+    ];
     resetPkInput();
   }
 
-  // ponytail: alias — didefinisikan ulang di bawah setelah subtotal ada
-  // (const tidak bisa dipakai sebelum deklarasi / TDZ).
+  const pkHapusBaris = (i) => (pkBaris = pkBaris.filter((_, j) => j !== i));
+
+  // ponytail: alias — subtotal defined above; kept for the header/row totals.
   const pkSum = (rows) => subtotal(rows);
 
+  // One submit for both modes: POST when adding, PATCH when editing.
   async function simpanPaket(e) {
     e.preventDefault();
     error = '';
     notice = '';
     busy = true;
     try {
-      const { res, data } = await api('/api/paket', {
-        method: 'POST',
+      const editing = pkMode === 'edit' && pkTarget;
+      const { res, data } = await api(editing ? `/api/paket/${pkTarget.id}` : '/api/paket', {
+        method: editing ? 'PATCH' : 'POST',
         body: JSON.stringify({ nama: pkNama, deskripsi: pkDeskripsi, baris: pkBaris }),
       });
       if (!res.ok) {
-        error = data.error ?? 'Gagal menyimpan paket.';
+        error = data.error ?? (editing ? 'Gagal mengubah paket.' : 'Gagal menyimpan paket.');
         return;
       }
-      notice = `${data.nama ?? pkNama} ditambahkan.`;
-      pkNama = '';
-      pkDeskripsi = '';
-      pkBaris = [];
-      resetPkInput();
-      paketBuilderOpen = false;
-      await load();
-    } finally {
-      busy = false;
-    }
-  }
-
-  // PATCH wholesale: baris paket diganti sekaligus. Dokumen lama tak ikut
-  // berubah (snapshot milik sendiri) — notice mengingatkan itu.
-  async function simpanEditPaket(p, e) {
-    e.preventDefault();
-    error = '';
-    notice = '';
-    busy = true;
-    try {
-      const { res, data } = await api(`/api/paket/${p.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ nama: pkEditNama, deskripsi: pkEditDeskripsi, baris: pkEditBaris }),
-      });
-      if (!res.ok) {
-        error = data.error ?? 'Gagal mengubah paket.';
-        return;
-      }
-      notice = `${data.nama ?? p.nama} diubah — RAB/Transaksi lama tidak ikut berubah.`;
-      editPaketId = null;
+      notice = editing
+        ? `${data.nama ?? pkNama} diubah. RAB/Transaksi lama tidak ikut berubah.`
+        : `${data.nama ?? pkNama} ditambahkan.`;
+      pkReset();
+      pkTarget = null;
+      tutupPanel();
       await load();
     } finally {
       busy = false;
@@ -1170,8 +1146,7 @@
     // Expand + builder Paket ikut reset (Q25); tak ada lapis-dua tersisa.
     if (v !== 'paket') {
       openPaketId = null;
-      paketBuilderOpen = false;
-      editPaketId = null;
+      pkTarget = null;
     }
     // Expand + lapis-dua Alat ikut reset (Q25); toggle arsip sesi tetap.
     if (v !== 'alat') {
@@ -1344,6 +1319,9 @@
     // Same for the Invoice bayar/tempo target: cleared so a dismissed Panel never
     // re-renders a stale target form (ticket 06).
     invForm = null;
+    // And the Paket builder target (ticket 07).
+    pkTarget = null;
+    pkMode = 'add';
   }
   // Backdrop click: the dialog's own box is the sheet, so a click whose target
   // is the dialog element itself landed outside the content and should close.
@@ -1570,6 +1548,67 @@
     <button class="rounded-rw-control border border-rw-border-gray/40 px-6 py-2.5 text-body-sm max-md:py-3 max-md:w-full" type="submit" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan tempo'}</button>
   </form>
   {/if}
+{/snippet}
+
+<!-- Paket builder body — rendered inside the Panel by bukaPaketBuilder()/
+     bukaEditPaket() (ticket 07). One no-arg snippet serves add + edit (mode is
+     `pkMode`), matching briefFormSnippet/invForm: a snippet passed to the Panel
+     as a value must not be pre-invoked with an argument. Each item row is a
+     labelled sub-card (two field rows), not a seven-column single line, so no
+     field relies on a placeholder as its label. -->
+{#snippet paketBuilderSnippet()}
+  <form class="grid gap-5" onsubmit={simpanPaket} data-paket-form data-pk-mode={pkMode}>
+    {#if pkMode === 'edit'}
+      <p class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm text-rw-light-gray">
+        Mengubah paket tidak mengubah RAB/Transaksi lama. Dokumen itu punya snapshot sendiri.
+      </p>
+    {/if}
+    <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
+      <label class="grid gap-1 text-body-sm">Nama paket<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" name="nama" required bind:value={pkNama} placeholder="Paket Dokumentasi" /></label>
+      <label class="grid gap-1 text-body-sm">Deskripsi (opsional)<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={pkDeskripsi} placeholder="Live streaming 1 kamera" /></label>
+    </div>
+
+    <!-- Existing rows: labelled sub-cards (ticket 07). -->
+    {#if pkBaris.length}
+      <div class="grid gap-3">
+        {#each pkBaris as b, i (i)}
+          <div class="rounded-rw-card border border-rw-border-gray/40 bg-rw-ground p-3" data-pk-baris>
+            <div class="flex items-start justify-between gap-3">
+              <p class="text-body-sm font-normal">{b.nama}</p>
+              <button type="button" class="shrink-0 text-body-sm text-rw-danger-text underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" aria-label={`Hapus baris ${b.nama}`} onclick={() => pkHapusBaris(i)}>hapus</button>
+            </div>
+            <dl class="mt-2 grid grid-cols-2 gap-2 text-caption text-rw-light-gray sm:grid-cols-4">
+              <div><dt class="uppercase tracking-wide">Jenis</dt><dd class="text-body-sm text-rw-off-white">{b.jenis}</dd></div>
+              <div><dt class="uppercase tracking-wide">Kategori</dt><dd class="text-body-sm text-rw-off-white">{b.kategori}</dd></div>
+              <div><dt class="uppercase tracking-wide">Qty</dt><dd class="text-body-sm text-rw-off-white">{b.qty} {b.satuan}</dd></div>
+              <div class="text-right"><dt class="uppercase tracking-wide">Rate</dt><dd class="text-body-sm tabular-nums text-rw-off-white">{rupiah(b.harga_satuan)}</dd></div>
+            </dl>
+          </div>
+        {/each}
+        <p class="text-body-sm">Total {rupiah(pkSum(pkBaris))}</p>
+      </div>
+    {:else}
+      <p class="text-body-sm text-rw-light-gray">Belum ada baris, tambah item lewat sub-kartu di bawah.</p>
+    {/if}
+
+    <!-- Add-row sub-card: labelled fields in two rows (replaces the 7-column line). -->
+    <fieldset class="grid gap-3 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3">
+      <legend class="px-1 text-caption uppercase tracking-wide text-rw-light-gray">+ Item baru</legend>
+      <label class="grid gap-1 text-body-sm">Item<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={pbNama} placeholder="SONY NXR-100" data-pk-item /></label>
+      <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <label class="grid gap-1 text-body-sm">Jenis<select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={pbJenis} data-pk-jenis><option value="alat">alat</option><option value="jasa">jasa</option><option value="biaya">biaya</option></select></label>
+        <label class="grid gap-1 text-body-sm">Kategori<select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={pbKategori} data-pk-kategori>{#each KATEGORI as k (k)}<option value={k}>{k}</option>{/each}</select></label>
+        <label class="grid gap-1 text-body-sm">Qty<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" min="1" step="1" bind:value={pbQty} data-pk-qty /></label>
+        <label class="grid gap-1 text-body-sm">Satuan<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={pbSatuan} placeholder="Unit" data-pk-satuan /></label>
+      </div>
+      <label class="grid gap-1 text-body-sm">Rate (Rp)<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" min="0" step="1" bind:value={pbHarga} data-pk-harga /></label>
+      <button type="button" class="rounded-rw-control border border-rw-border-gray/40 px-5 py-2.5 text-body-sm max-md:py-3 max-md:w-full" onclick={pkTambahBaris} data-pk-tambah-baris>+ Tambah baris</button>
+    </fieldset>
+
+    <button class="rounded-rw-control bg-rw-accent px-6 py-2.5 text-body-sm text-rw-white disabled:opacity-50 max-md:py-3 max-md:w-full" type="submit" disabled={busy}>
+      {busy ? 'Menyimpan…' : pkMode === 'edit' ? 'Simpan perubahan' : 'Simpan paket'}
+    </button>
+  </form>
 {/snippet}
 
 {#snippet txRow(t)}
@@ -1986,169 +2025,45 @@
     <section class="mt-8" data-view="paket">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-subheading font-normal">Paket</h2>
-        <button class="rounded-pill bg-navy-ink px-5 py-3 text-body-sm text-bone-white" onclick={bukaPaketBuilder} data-paket-toggle>
-          {paketBuilderOpen ? 'Tutup' : '+ Paket baru'}
+        <button class="rounded-rw-control bg-rw-accent px-5 py-2.5 text-body-sm text-rw-white max-md:py-3" onclick={bukaPaketBuilder} data-paket-toggle>
+          + Paket baru
         </button>
       </div>
 
-      {#if paketBuilderOpen}
-      <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4" onsubmit={simpanPaket} data-paket-form>
-        <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
-          <label class="grid gap-1 text-body-sm">
-            Nama paket
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" name="nama" required bind:value={pkNama} placeholder="Paket Dokumentasi" />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Deskripsi (opsional)
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pkDeskripsi} placeholder="Live streaming 1 kamera" />
-          </label>
-        </div>
-        {#if pkBaris.length}
-          <ul class="grid gap-1 text-body-sm">
-            {#each pkBaris as b, i (i)}
-              <li class="flex justify-between gap-2">
-                <span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis} · {b.kategori}]</span></span>
-                <span>{rupiah(b.qty * b.harga_satuan)} <button type="button" class="underline" onclick={() => (pkBaris = pkBaris.filter((_, j) => j !== i))}>hapus</button></span>
-              </li>
-            {/each}
-          </ul>
-          <p class="text-body-sm">Total {rupiah(pkSum(pkBaris))}</p>
-        {:else}
-          <p class="text-body-sm text-graphite">Belum ada baris — tambah kategori/jenis/qty/satuan/rate di bawah.</p>
-        {/if}
-        <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] md:items-end">
-          <label class="grid gap-1 text-body-sm">
-            Item
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pbNama} placeholder="SONY NXR-100" data-pk-item />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Jenis
-            <select class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pbJenis} data-pk-jenis>
-              <option value="alat">alat</option>
-              <option value="jasa">jasa</option>
-              <option value="biaya">biaya</option>
-            </select>
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Kategori
-            <select class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pbKategori} data-pk-kategori>
-              {#each KATEGORI as k (k)}<option value={k}>{k}</option>{/each}
-            </select>
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Qty
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="1" step="1" bind:value={pbQty} data-pk-qty />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Satuan
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pbSatuan} placeholder="Unit" data-pk-satuan />
-          </label>
-          <label class="grid gap-1 text-body-sm">
-            Rate (Rp)
-            <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="0" step="1" bind:value={pbHarga} data-pk-harga />
-          </label>
-          <button type="button" class="rounded-pill border border-ash px-5 py-3 text-body-sm max-md:w-full" onclick={() => pkTambahBaris(pkBaris, (v) => (pkBaris = v))} data-pk-tambah-baris>+ Baris</button>
-        </div>
-        <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white disabled:opacity-50 md:justify-self-start max-md:w-full" type="submit" disabled={busy}>{busy ? '…' : 'Simpan paket'}</button>
-      </form>
-      {/if}
-
       {#if !paket.length}
         <!-- Empty state: satu baris + CTA (Q34). -->
-        <p class="mt-4 text-body-sm text-graphite">Belum ada paket. Mulai lewat tombol “+ Paket baru” di atas.</p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Belum ada paket. Mulai lewat tombol “+ Paket baru” di atas.</p>
       {:else}
         <ul class="mt-4 grid gap-4">
           {#each paket as p (p.id)}
-            <li class="border border-ash bg-bone-white p-4" data-paket-card data-paket-id={p.id}>
+            <li class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4" data-paket-card data-paket-id={p.id}>
               <div class="flex flex-wrap items-baseline justify-between gap-2">
                 <p class="text-body font-normal">{p.nama}</p>
-                <p class="text-body-sm">{rupiah(p.total)}</p>
+                <p class="text-body-sm tabular-nums">{rupiah(p.total)}</p>
               </div>
-              {#if p.deskripsi}<p class="mt-1 text-caption text-graphite">{p.deskripsi}</p>{/if}
+              {#if p.deskripsi}<p class="mt-1 text-caption text-rw-light-gray">{p.deskripsi}</p>{/if}
               <div class="mt-2 flex flex-wrap gap-4 text-body-sm">
-                <button class="underline" onclick={() => (openPaketId = openPaketId === p.id ? null : p.id)}>
+                <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => (openPaketId = openPaketId === p.id ? null : p.id)}>
                   {openPaketId === p.id ? 'Tutup rincian' : `Lihat ${p.baris.length} baris`}
                 </button>
-                <button class="underline" onclick={() => bukaEditPaket(p)}>{editPaketId === p.id ? 'Tutup ubah' : 'Ubah'}</button>
-                <button class="underline" onclick={() => dariPaket(p)}>Buat RAB</button>
+                <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bukaEditPaket(p)}>Ubah</button>
+                <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => dariPaket(p)}>Buat RAB</button>
               </div>
               {#if openPaketId === p.id}
-                <div class="mt-3 border-t border-ash pt-3">
+                <div class="mt-3 border-t border-rw-border-gray/40 pt-3">
                   {#each paketGrup(p) as g (g.kategori)}
-                    <p class="mt-2 text-caption uppercase text-graphite">{g.kategori}: subtotal {rupiah(g.subtotal)}</p>
+                    <p class="mt-2 text-caption uppercase text-rw-light-gray">{g.kategori}: subtotal {rupiah(g.subtotal)}</p>
                     <ul class="grid gap-1 text-body-sm">
                       {#each g.baris as b (b.id)}
                         <li class="flex justify-between gap-2">
-                          <span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis}]</span></span>
-                          <span>{rupiah(b.qty * b.harga_satuan)}</span>
+                          <span>{b.nama} × {b.qty} {b.satuan} <span class="text-rw-light-gray">[{b.jenis}]</span></span>
+                          <span class="tabular-nums">{rupiah(b.qty * b.harga_satuan)}</span>
                         </li>
                       {/each}
                     </ul>
                   {/each}
                   <p class="mt-2 text-body-sm font-normal">Total {rupiah(p.total)}</p>
                 </div>
-              {/if}
-              {#if editPaketId === p.id}
-                <form class="mt-4 grid gap-4 border-t border-ash pt-4" onsubmit={(e) => simpanEditPaket(p, e)} data-paket-edit-form>
-                  <p class="text-body-sm text-graphite">Mengubah paket tidak mengubah RAB/Transaksi lama — dokumen itu punya snapshot sendiri.</p>
-                  <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
-                    <label class="grid gap-1 text-body-sm">
-                      Nama paket
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" required bind:value={pkEditNama} />
-                    </label>
-                    <label class="grid gap-1 text-body-sm">
-                      Deskripsi (opsional)
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pkEditDeskripsi} />
-                    </label>
-                  </div>
-                  {#if pkEditBaris.length}
-                    <ul class="grid gap-1 text-body-sm">
-                      {#each pkEditBaris as b, i (i)}
-                        <li class="flex justify-between gap-2">
-                          <span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis} · {b.kategori}]</span></span>
-                          <span>{rupiah(b.qty * b.harga_satuan)} <button type="button" class="underline" onclick={() => (pkEditBaris = pkEditBaris.filter((_, j) => j !== i))}>hapus</button></span>
-                        </li>
-                      {/each}
-                    </ul>
-                    <p class="text-body-sm">Total {rupiah(pkSum(pkEditBaris))}</p>
-                  {:else}
-                    <p class="text-body-sm text-graphite">Belum ada baris — tambah di bawah.</p>
-                  {/if}
-                  <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] md:items-end">
-                    <label class="grid gap-1 text-body-sm">
-                      Item
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pbNama} placeholder="SONY NXR-100" data-pk-item />
-                    </label>
-                    <label class="grid gap-1 text-body-sm">
-                      Jenis
-                      <select class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pbJenis} data-pk-jenis>
-                        <option value="alat">alat</option>
-                        <option value="jasa">jasa</option>
-                        <option value="biaya">biaya</option>
-                      </select>
-                    </label>
-                    <label class="grid gap-1 text-body-sm">
-                      Kategori
-                      <select class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pbKategori} data-pk-kategori>
-                        {#each KATEGORI as k (k)}<option value={k}>{k}</option>{/each}
-                      </select>
-                    </label>
-                    <label class="grid gap-1 text-body-sm">
-                      Qty
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="1" step="1" bind:value={pbQty} data-pk-qty />
-                    </label>
-                    <label class="grid gap-1 text-body-sm">
-                      Satuan
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={pbSatuan} placeholder="Unit" data-pk-satuan />
-                    </label>
-                    <label class="grid gap-1 text-body-sm">
-                      Rate (Rp)
-                      <input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="0" step="1" bind:value={pbHarga} data-pk-harga />
-                    </label>
-                    <button type="button" class="rounded-pill border border-ash px-5 py-3 text-body-sm max-md:w-full" onclick={() => pkTambahBaris(pkEditBaris, (v) => (pkEditBaris = v))} data-pk-tambah-baris>+ Baris</button>
-                  </div>
-                  <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white disabled:opacity-50 md:justify-self-start max-md:w-full" type="submit" disabled={busy}>{busy ? '…' : 'Simpan perubahan'}</button>
-                </form>
               {/if}
             </li>
           {/each}
