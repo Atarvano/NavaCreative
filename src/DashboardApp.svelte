@@ -2,6 +2,21 @@
   // DashboardApp: shell #54, tabel Transaksi #55 / RAB #56 / Invoice #57,
   // Ringkasan #58, Alat cards + servis lapis-dua + arsip toggle #59.
   import { onMount } from 'svelte';
+  // Nav icons (ADR-0013, ticket 02): per-icon imports from @lucide/svelte so the
+  // bundle only carries the seven glyphs the sidebar uses. Each glyph names its
+  // view's artifact (overview / money transfer / budget doc / bill / package /
+  // tool / settings) rather than being a decorative set (antislop R-04).
+  import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
+  import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
+  import FileText from '@lucide/svelte/icons/file-text';
+  import Receipt from '@lucide/svelte/icons/receipt';
+  import Package from '@lucide/svelte/icons/package';
+  import Wrench from '@lucide/svelte/icons/wrench';
+  import Settings from '@lucide/svelte/icons/settings';
+  import LogOut from '@lucide/svelte/icons/log-out';
+  import Menu from '@lucide/svelte/icons/menu';
+  import User from '@lucide/svelte/icons/user';
+  import X from '@lucide/svelte/icons/x';
 
   let me = $state(null);
   let alat = $state([]);
@@ -663,6 +678,7 @@
   let walkinOpen = $state(false);
   // Brief second layer opens inside the expand (Q18), one at a time.
   let briefOpenId = $state(null);
+  let briefTx = $state(null); // transaksi whose brief is open in the Panel
   // Table state (Q12/Q24): search + status filter + one sortable column.
   // Filter tetap state sesi (Q35) — session vars, never in the URL.
   let txSearch = $state('');
@@ -747,15 +763,18 @@
     txHarga = '';
   }
 
-  // Brief lapis-dua (Q18): buka di dalam expand; draft 401 dibuka kembali
-  // bila masih cocok dengan transaksi yang sama.
+  // Brief (Q18, ticket 02): now opens in the shared Panel instead of pushing the
+  // Transaksi table around (ADR-0012 amendment). briefOpenId still tracks which
+  // transaksi's brief is showing, so the 401 draft-restore path is unchanged.
   function bukaBrief(t) {
-    briefOpenId = briefOpenId === t.id ? null : t.id;
+    briefOpenId = t.id;
+    briefTx = t;
     const draf = ambilDraft('brief');
-    if (briefOpenId === t.id && draf && draf.transaksi_id === t.id) {
+    if (draf && draf.transaksi_id === t.id) {
       brForm = draf.form;
       notice = 'Draft Brief sebelumnya dibuka kembali.';
     }
+    bukaPanel(`Brief — ${t.nama_project}`, briefFormSnippet);
   }
 
   async function simpanTransaksi(e) {
@@ -1041,6 +1060,7 @@
       brief = data.brief;
       notice = `Brief ${t.nama_project} tersimpan.`;
       hapusDraft('brief');
+      tutupPanel();
     }
   }
 
@@ -1069,9 +1089,19 @@
   let view = $state('ringkasan');
   let ringkasan = $state(null);
   let setForm = $state({});
+  // Nav map: view key → label + icon component. The icon choice is written down
+  // per view (antislop R-04): dashboard = overview, arrow-left-right = money
+  // in/out, file-text = budget document (RAB), receipt = bill (Invoice),
+  // package = bundled paket, wrench = equipment (Alat), settings = Settings.
   const NAV = [
-    ['OPERASIONAL', [['ringkasan', 'Ringkasan'], ['transaksi', 'Transaksi'], ['rab', 'RAB'], ['invoice', 'Invoice'], ['paket', 'Paket']]],
-    ['MASTER', [['alat', 'Alat']]],
+    ['OPERASIONAL', [
+      ['ringkasan', 'Ringkasan', LayoutDashboard],
+      ['transaksi', 'Transaksi', ArrowLeftRight],
+      ['rab', 'RAB', FileText],
+      ['invoice', 'Invoice', Receipt],
+      ['paket', 'Paket', Package],
+    ]],
+    ['MASTER', [['alat', 'Alat', Wrench]]],
   ];
   const VIEW_KEYS = [...NAV.flatMap(([, g]) => g.map(([k]) => k)), 'settings'];
 
@@ -1085,6 +1115,9 @@
   async function tampilkan(v) {
     if (!VIEW_KEYS.includes(v)) v = 'ringkasan';
     view = v;
+    // Panel is bound to a form opened from one view; leaving that view closes it
+    // so a stale Panel never floats over an unrelated view (ticket 02).
+    tutupPanel();
     // Q25: expand reset saat pindah view (lompat Ringkasan #58 = pengecualian:
     // lompatExpand dipasang ulang tepat sesudah reset di bawah).
     if (v !== 'transaksi') {
@@ -1227,7 +1260,45 @@
     if (e.key === 'Escape') tutupDrawer();
   });
 
-  // Banner sticky (Q37): notice hijau auto 6 dtk, error merah menetap.
+  // --- Panel (ADR-0012 amendment, ticket 02): shared right-side drawer ---
+  // Heavyweight forms open here instead of pushing their table around. Built on
+  // the native <dialog> element so Esc-to-close and top-layer stacking come from
+  // the platform (no custom focus trap); a click on the backdrop also closes it.
+  // 480-560px right drawer on desktop, full-screen sheet under md.
+  let panelOpen = $state(false);
+  let panelEl = $state(null); // <dialog> ref, used for showModal()/close()
+  // Title + body are set by whoever opens the panel; the panel itself owns only
+  // the drawer chrome (Esc, backdrop, close button).
+  let panelTitle = $state('');
+  let panelIsi = $state(null); // a snippet to render inside the sheet
+
+  // $effect keeps the dialog's open state in sync with panelOpen, so any trigger
+  // (or Esc, which closes the dialog natively) leaves the flag consistent.
+  $effect(() => {
+    if (!panelEl) return;
+    if (panelOpen && !panelEl.open) panelEl.showModal();
+    if (!panelOpen && panelEl.open) panelEl.close();
+  });
+
+  function bukaPanel(judul, isi) {
+    panelTitle = judul;
+    panelIsi = isi;
+    panelOpen = true;
+  }
+  function tutupPanel() {
+    panelOpen = false;
+    // Brief state is only meaningful while its Panel is open; clearing it here keeps
+    // the 401 draft-stash from stashing a Brief the user already dismissed.
+    briefOpenId = null;
+    briefTx = null;
+  }
+  // Backdrop click: the dialog's own box is the sheet, so a click whose target
+  // is the dialog element itself landed outside the content and should close.
+  function panelKlikLuar(e) {
+    if (e.target === panelEl) tutupPanel();
+  }
+
+  // Banner sticky (Q37): notice auto-hides after 6s, error stays until dismissed.
   $effect(() => {
     if (!notice) return;
     const t = setTimeout(() => (notice = ''), 6000);
@@ -1259,6 +1330,40 @@
     }
   }
 </script>
+
+<!-- Skeleton (ticket 02): pure-CSS loading placeholder, no image, no JS timer.
+     The bars are decorative (aria-hidden); a visually-hidden live label keeps the
+     loading state announced to assistive tech, which the old "Memuat…" text did.
+     The shimmer runs under prefers-reduced-motion: no-preference, so a
+     reduced-motion user still gets a static grey block (antislop R-27). -->
+{#snippet skeleton(baris = 3)}
+  <div role="status" data-skeleton>
+    <span class="sr-only">Memuat…</span>
+    <div class="grid gap-2" aria-hidden="true">
+      {#each Array(baris) as _}
+        <div class="skeleton-bar h-4 w-full rounded-rw-badge"></div>
+      {/each}
+    </div>
+  </div>
+{/snippet}
+
+<!-- Brief form body — rendered inside the Panel by bukaBrief(). Field set and
+     bindings are unchanged from the previous inline form; only the container
+     moved (antislop: a form's behaviour is not restyled by relocating it). -->
+{#snippet briefFormSnippet()}
+  {#if briefTx}
+    <form class="grid gap-3 max-md:grid-cols-1 md:grid-cols-2" onsubmit={(e) => simpanBrief(briefTx, e)} data-brief-form>
+      {#each [['objective', 'Objective'], ['audience', 'Audience'], ['style', 'Style'], ['mood', 'Mood'], ['lokasi', 'Lokasi'], ['talent', 'Talent'], ['deliverables', 'Deliverables'], ['deadline', 'Deadline'], ['notes', 'Notes']] as [f, label] (f)}
+        <label class="grid gap-1 text-body-sm">{label}<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2 text-body-sm" type={f === 'deadline' ? 'date' : 'text'} bind:value={brForm[f]} /></label>
+      {/each}
+      <label class="grid gap-1 text-body-sm">DO<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2 text-body-sm" bind:value={brForm.dos} /></label>
+      <label class="grid gap-1 text-body-sm">DON'T<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2 text-body-sm" bind:value={brForm.donts} /></label>
+      <button class="rounded-rw-control bg-rw-accent px-6 py-2.5 text-body-sm text-rw-white disabled:opacity-50 md:col-span-2 md:justify-self-start max-md:w-full" type="submit" disabled={busy}>
+        {busy ? 'Menyimpan…' : 'Simpan brief'}
+      </button>
+    </form>
+  {/if}
+{/snippet}
 
 {#snippet txRow(t)}
   <tr class="border-b border-ash align-top scroll-mt-24 {openTransaksiId === t.id ? 'bg-canvas' : ''}">
@@ -1300,22 +1405,11 @@
       {#if !txGrup(t).length}<p class="text-body-sm text-graphite">Tanpa baris.</p>{/if}
     </div>
     <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
-      <button class="underline" onclick={() => bukaBrief(t)} data-brief-toggle>{briefOpenId === t.id ? 'Tutup Brief' : 'Brief'}</button>
+      <button class="underline" onclick={() => bukaBrief(t)} data-brief-toggle>Brief</button>
       <button class="underline" onclick={() => printBrief(t)}>Cetak brief</button>
       {#if !t.invoice_terbit && t.status !== 'selesai' && t.status !== 'batal'}<button class="underline" onclick={() => terbitkan(t)}>Terbitkan invoice</button>{/if}
       {#if t.status !== 'batal' && t.status !== 'selesai'}<button class="underline" onclick={() => statusTransaksi(t, 'batal')}>Batal</button>{/if}
     </div>
-    {#if briefOpenId === t.id}
-      <form class="mt-4 grid gap-3 border-t border-ash pt-4 max-md:grid-cols-1 md:grid-cols-2" onsubmit={(e) => simpanBrief(t, e)} data-brief-form>
-        <p class="text-body font-normal md:col-span-2">Brief project — {t.nama_project}</p>
-        {#each [['objective', 'Objective'], ['audience', 'Audience'], ['style', 'Style'], ['mood', 'Mood'], ['lokasi', 'Lokasi'], ['talent', 'Talent'], ['deliverables', 'Deliverables'], ['deadline', 'Deadline'], ['notes', 'Notes']] as [f, label] (f)}
-          <label class="grid gap-1 text-body-sm">{label}<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type={f === 'deadline' ? 'date' : 'text'} bind:value={brForm[f]} /></label>
-        {/each}
-        <label class="grid gap-1 text-body-sm">DO<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={brForm.dos} /></label>
-        <label class="grid gap-1 text-body-sm">DON'T<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={brForm.donts} /></label>
-        <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white md:col-span-2 md:justify-self-start max-md:w-full" type="submit">Simpan brief</button>
-      </form>
-    {/if}
   </td></tr>
   {/if}
 {/snippet}
@@ -1434,7 +1528,7 @@
         {/if}
       </div>
     {:else}
-      <p class="text-body-sm text-graphite">Memuat…</p>
+      {@render skeleton(2)}
     {/if}
   </td></tr>
   {/if}
@@ -1504,72 +1598,119 @@
   </li>
 {/snippet}
 
-{#snippet navItem(v, label)}
+{#snippet navItem(v, label, Icon)}
+  <!-- Active item: purple text + a thin purple tint on charcoal, so location is
+       marked by the one accent (antislop: purple is the dashboard's single
+       deliberate accent) rather than a heavy solid block. -->
   <button
-    class="flex w-full items-center justify-between gap-2 rounded-none px-4 py-2.5 text-left text-body-sm {view === v ? 'bg-navy-ink text-bone-white' : 'text-ink-black hover:bg-canvas'}"
+    class="flex min-h-11 w-full items-center justify-between gap-2 rounded-rw-control px-3 py-2 text-left text-body-sm transition-colors {view === v
+      ? 'bg-rw-accent/15 text-rw-accent'
+      : 'text-rw-light-gray hover:bg-rw-off-white/5 hover:text-rw-off-white'}"
     aria-current={view === v ? 'page' : undefined}
     onclick={() => pilih(v)}
   >
-    {label}
+    <span class="flex items-center gap-3">
+      <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+      <span>{label}</span>
+    </span>
     {#if v === 'invoice' && invBelumLunas.length}
-      <span data-badge-invoice class="rounded-pill px-2 py-0.5 text-caption {invOverdue ? 'bg-magenta-bloom text-bone-white' : 'bg-signal-yellow text-ink-black'}">{invBelumLunas.length}</span>
+      <span data-badge-invoice class="rounded-rw-badge px-2 py-0.5 text-caption {invOverdue ? 'bg-rw-danger/20 text-rw-danger-text' : 'bg-rw-off-white/10 text-rw-off-white'}">{invBelumLunas.length}</span>
     {:else if v === 'transaksi' && txAktif}
-      <span data-badge-transaksi class="rounded-pill bg-navy-ink px-2 py-0.5 text-caption text-bone-white">{txAktif}</span>
+      <span data-badge-transaksi class="rounded-rw-badge bg-rw-off-white/10 px-2 py-0.5 text-caption text-rw-off-white">{txAktif}</span>
     {/if}
   </button>
 {/snippet}
 
 {#snippet sidebar()}
-  <p class="px-4 pt-5 pb-2 text-subheading font-normal">Nava</p>
+  <p class="px-3 pt-5 pb-2 font-rw-serif text-subheading">Nava</p>
   <nav class="flex-1 overflow-y-auto px-2 pb-4" aria-label="Dashboard">
     {#each NAV as [group, items] (group)}
-      <p class="px-4 pt-4 pb-1 text-caption uppercase text-graphite">{group}</p>
-      {#each items as [v, label] (v)}
-        {@render navItem(v, label)}
+      <p class="px-3 pt-4 pb-1 text-caption uppercase tracking-wide text-rw-mid-gray">{group}</p>
+      {#each items as [v, label, Icon] (v)}
+        {@render navItem(v, label, Icon)}
       {/each}
     {/each}
-    <div class="mt-4 border-t border-ash"></div>
-    {@render navItem('settings', 'Settings')}
+    <div class="mx-3 mt-4 border-t border-rw-border-gray/40"></div>
+    {@render navItem('settings', 'Settings', Settings)}
   </nav>
-  <div class="border-t border-ash px-4 py-3">
-    {#if me}<p class="text-body-sm text-graphite">{me}</p>{/if}
-    <button class="mt-1 text-body-sm underline" onclick={logout}>Keluar</button>
+  <div class="flex items-center justify-between gap-3 border-t border-rw-border-gray/40 px-3 py-3">
+    <span class="flex min-w-0 items-center gap-2 text-body-sm text-rw-light-gray">
+      <User size={16} strokeWidth={1.75} aria-hidden="true" />
+      {#if me}<span class="truncate">{me}</span>{/if}
+    </span>
+    <button class="flex shrink-0 items-center gap-2 text-body-sm text-rw-light-gray hover:text-rw-off-white" onclick={logout}>
+      <LogOut size={16} strokeWidth={1.75} aria-hidden="true" />
+      Keluar
+    </button>
   </div>
 {/snippet}
 
-<!-- Sidebar desktop, fixed ~260px (ADR-0012) -->
-<aside data-sidebar class="fixed inset-y-0 left-0 z-40 hidden w-[260px] flex-col border-r border-ash bg-bone-white md:flex">
+<!-- Sidebar desktop, fixed ~260px (ADR-0012). Charcoal surface (#33323E) reads
+     as chrome on the #13111C ground; hairline border separates the two. -->
+<aside data-sidebar class="fixed inset-y-0 left-0 z-40 hidden w-[260px] flex-col border-r border-rw-border-gray/40 bg-rw-charcoal md:flex">
   {@render sidebar()}
 </aside>
 
 <!-- Topbar mobile: hamburger + Nava + user -->
-<header class="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-ash bg-bone-white px-4 md:hidden">
-  <button class="-ml-2 p-2" aria-label="Buka menu" onclick={bukaDrawer}>
-    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 4h16M2 10h16M2 16h16" stroke="currentColor" stroke-width="2" /></svg>
+<header class="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-rw-border-gray/40 bg-rw-charcoal px-4 md:hidden">
+  <button class="-ml-2 rounded-rw-control p-2 text-rw-off-white" aria-label="Buka menu" onclick={bukaDrawer}>
+    <Menu size={20} strokeWidth={1.75} aria-hidden="true" />
   </button>
-  <p class="text-subheading font-normal">Nava</p>
-  <span class="text-body-sm text-graphite">{me}</span>
+  <p class="font-rw-serif text-subheading">Nava</p>
+  <span class="flex items-center gap-2 text-body-sm text-rw-light-gray">
+    <User size={16} strokeWidth={1.75} aria-hidden="true" />
+    {me}
+  </span>
 </header>
 
 <!-- Drawer overlay mobile -->
 {#if drawerOpen}
   <div class="fixed inset-0 z-50 md:hidden">
-    <button class="absolute inset-0 bg-navy-ink/60" aria-label="Tutup menu" onclick={tutupDrawer}></button>
-    <div data-drawer class="absolute inset-y-0 left-0 flex w-[260px] flex-col bg-bone-white">
+    <button class="absolute inset-0 bg-rw-darker/70" aria-label="Tutup menu" onclick={tutupDrawer}></button>
+    <div data-drawer class="absolute inset-y-0 left-0 flex w-[260px] flex-col bg-rw-charcoal">
       {@render sidebar()}
     </div>
   </div>
 {/if}
 
-<div class="min-h-dvh bg-canvas md:pl-[260px]">
-  <!-- Banner sticky (Q37): error merah menetap, notice hijau auto 6 dtk -->
+<!-- Panel (ticket 02): shared heavyweight-form container. Native <dialog> so
+     Esc and top-layer come from the platform; backdrop click also closes.
+     The dialog itself is a full-viewport layer (inset-0) so its exposed area is
+     clickable for outside-click; the sheet is pinned right on desktop and fills
+     the screen on mobile (the sheet's own w-screen under md). -->
+<dialog
+  bind:this={panelEl}
+  data-panel
+  onclose={tutupPanel}
+  onclick={panelKlikLuar}
+  class="panel inset-0 m-0 h-dvh w-screen max-h-none max-w-none border-0 bg-transparent p-0 text-rw-off-white"
+>
+  <div class="ml-auto flex h-dvh w-screen flex-col border-l border-rw-border-gray/40 bg-rw-charcoal md:w-[480px]">
+    <div class="flex items-center justify-between gap-4 border-b border-rw-border-gray/40 px-5 py-4">
+      <h2 class="text-subheading">{panelTitle}</h2>
+      <button class="rounded-rw-control p-2 text-rw-light-gray hover:text-rw-off-white" aria-label="Tutup panel" onclick={tutupPanel}>
+        <X size={18} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto px-5 py-4">
+      {@render panelIsi?.()}
+    </div>
+  </div>
+</dialog>
+
+<div class="min-h-dvh bg-rw-ground md:pl-[260px]">
+  <!-- Banner sticky (Q37): error merah menetap, notice hijau→netral auto 6 dtk.
+       Colours are the dark-palette tints (ADR-0013) so the banner reads on the
+       #13111C ground instead of the old light banner blocks. -->
   {#if error || notice}
     <div
-      class="sticky top-14 z-30 flex items-center justify-between gap-4 px-(--pad) py-3 text-body-sm text-bone-white md:top-0 {error ? 'bg-magenta-bloom' : 'bg-forest-teal'}"
+      class="sticky top-14 z-30 flex items-center justify-between gap-4 border-b px-(--pad) py-3 text-body-sm md:top-0 {error
+        ? 'border-rw-danger/30 bg-rw-danger/15 text-rw-danger-text'
+        : 'border-rw-border-gray/40 bg-rw-charcoal text-rw-off-white'}"
       role={error ? 'alert' : 'status'}
     >
       <span>{error || notice}</span>
-      <button class="shrink-0 underline" aria-label="Tutup notifikasi" onclick={() => { error = ''; notice = ''; }}>✕</button>
+      <button class="shrink-0 text-current underline" aria-label="Tutup notifikasi" onclick={() => { error = ''; notice = ''; }}>Tutup</button>
     </div>
   {/if}
 
@@ -2061,7 +2202,7 @@
     <section class="mt-8" data-view="ringkasan">
       <h2 class="text-subheading font-normal">Ringkasan</h2>
       {#if !ringkasan}
-        <p class="mt-4 text-body-sm text-graphite">Memuat…</p>
+        <div class="mt-4">{@render skeleton(4)}</div>
       {:else}
         <div class="mt-4 grid gap-4 grid-cols-2 lg:grid-cols-4">
           <!-- Label bulan statis (bukan filter tanggal). Klik → Invoice. -->
