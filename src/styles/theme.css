@@ -56,6 +56,8 @@
  --text-display--letter-spacing: -0.04em;
 
  /* Radii: pills only; cards/images stay sharp (rounded-none default) */
+ /* landing-only: --radius-pill drives the Creative Giants landing controls;
+    the dashboard never uses pills, it uses --radius-rw-* below (ADR-0013). */
  --radius-pill: 1440px;
 
  /* Breakpoint matches the legacy 767/768 split (md: == desktop) */
@@ -63,4 +65,67 @@
 
  /* Repo-standard ease */
  --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+
+ /* --------------------------------------------------------------------------
+    Railway dark: dashboard-only token namespace (ADR-0013). Added ALONGSIDE
+    the Creative Giants tokens above; not one existing token changes value.
+    These generate rw-* utilities (bg-rw-ground, text-rw-off-white,
+    rounded-rw-card, font-rw-serif, ...) but only the dashboard (.dash-root)
+    consumes them, so the landing pages that share this sheet render the same.
+    -------------------------------------------------------------------------- */
+ /* Surfaces and ink */
+ --color-rw-ground: #13111c; /* app background */
+ --color-rw-darker: #08070c; /* deepest wells */
+ --color-rw-charcoal: #33323e; /* raised surface: cards, panel */
+ --color-rw-white: #ffffff;
+ --color-rw-off-white: #f7f7f8; /* primary text on ground */
+ --color-rw-light-gray: #a1a0ab; /* secondary text */
+ --color-rw-mid-gray: #6c6b7b; /* muted text */
+ --color-rw-border-gray: #545260; /* hairline borders */
+ --color-rw-link: #dcdce0; /* links and focus ring on dark */
+ /* Accent: primary CTAs only (ADR-0013) */
+ --color-rw-accent: #9d4edd;
+ --color-rw-accent-subtle: #7c3aed;
+
+ /* Radii: no pills on the dashboard */
+ --radius-rw-control: 6px; /* buttons, inputs */
+ --radius-rw-card: 8px; /* cards, panel */
+ --radius-rw-badge: 4px; /* status badges */
+
+ /* Font stacks: IBM Plex Serif display + Inter UI (loaded in dashboard.html) */
+ --font-rw-serif:
+  "IBM Plex Serif", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+ --font-rw-sans:
+  "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+  "Segoe UI", Roboto, sans-serif;
+}
+
+/* ==========================================================================
+   Dashboard scope (.dash-root) - Railway dark foundation (ticket 01, ADR-0013).
+   UNLAYERED on purpose so it overrides both base.css (light body, black focus
+   ring, h1-h3 weight 300 - all in the `base` layer) AND the weight utilities
+   still on the dashboard headings, WITHOUT editing base.css. Scoped to
+   .dash-root, which only the dashboard carries, so the shared landing and
+   login pages are untouched.
+   ========================================================================== */
+.dash-root {
+  background: var(--color-rw-ground);
+  color: var(--color-rw-off-white);
+  font-family: var(--font-rw-sans);
+}
+
+/* Focus ring: base.css uses a black outline that disappears on #13111C; a
+   light neutral ring keeps a clear (>= 3:1) indicator on ground and surfaces
+   for keyboard users (antislop R-32 / R-25). */
+.dash-root :focus-visible {
+  outline: 2px solid var(--color-rw-link);
+  outline-offset: 2px;
+}
+
+/* View titles in IBM Plex Serif 500; the rest of the UI stays Inter. */
+.dash-root h1,
+.dash-root h2,
+.dash-root h3 {
+  font-family: var(--font-rw-serif);
+  font-weight: 500;
 }
