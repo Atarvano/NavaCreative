@@ -674,9 +674,8 @@
   let brForm = $state({});
 
   // --- Redesign 02 (#55): tabel + walk-in di balik + + Brief lapis-dua ---
-  // Walk-in builder hidden behind + (Q13); one draft flag, not field diffing.
-  let walkinOpen = $state(false);
-  // Brief second layer opens inside the expand (Q18), one at a time.
+  // Ticket 04: walk-in and Brief both open in the shared Panel, so no inline-open
+  // flag remains; `briefOpenId` still tracks the open Brief for the 401 stash.
   let briefOpenId = $state(null);
   let briefTx = $state(null); // transaksi whose brief is open in the Panel
   // Table state (Q12/Q24): search + status filter + one sortable column.
@@ -746,12 +745,16 @@
   };
   const draftAda = (d) => !!(d && (d.nama_project || d.nama_client || d.baris?.length));
 
+  // Walk-in (ticket 04): the builder now opens in the shared Panel instead of
+  // pushing the table down (ADR-0012 amendment), mirroring the Brief. The draft
+  // restore path is unchanged; opening only re-seeds the fields from localStorage
+  // when a stashed draft exists. Panel owns closing (Esc / outside click / button).
   function bukaWalkin() {
-    walkinOpen = !walkinOpen;
-    if (walkinOpen && draftAda(ambilDraft('transaksi'))) {
+    if (draftAda(ambilDraft('transaksi'))) {
       txMuatDraft(ambilDraft('transaksi'));
       notice = 'Draft walk-in sebelumnya dibuka kembali.';
     }
+    bukaPanel('Walk-in baru', walkinFormSnippet);
   }
 
   function txTambahBaris(e) {
@@ -800,7 +803,7 @@
         : 'Transaksi walk-in tersimpan.';
       hapusDraft('transaksi');
       txMuatDraft({});
-      walkinOpen = false;
+      tutupPanel();
       await load();
     } finally {
       busy = false;
@@ -1364,6 +1367,39 @@
   </div>
 {/snippet}
 
+<!-- Walk-in form body — rendered inside the Panel by bukaWalkin() (ticket 04).
+     Behaviour is unchanged from the previous inline form; only the container
+     moved, per ADR-0012's Detail Pattern hybrid: heavy forms live in the Panel,
+     light detail stays expand-in-place. -->
+{#snippet walkinFormSnippet()}
+  <form class="grid gap-4" onsubmit={simpanTransaksi} data-walkin-form>
+    <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
+      <label class="grid gap-1 text-body-sm">Nama project<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" required bind:value={txProject} placeholder="Drone Bandar Baru" /></label>
+      <label class="grid gap-1 text-body-sm">Nama client<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" required bind:value={txClient} placeholder="Pak Suhaimi" /></label>
+      <label class="grid gap-1 text-body-sm">Tanggal mulai<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="date" bind:value={txMulai} /></label>
+      <label class="grid gap-1 text-body-sm">Tanggal selesai<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="date" bind:value={txSelesai} /></label>
+      <label class="grid gap-1 text-body-sm md:col-span-2">Lokasi<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={txLokasi} placeholder="Bandar Baru" /></label>
+    </div>
+    {#if txBaris.length}
+      <ul class="grid gap-1 text-body-sm">
+        {#each txBaris as b, i (i)}
+          <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} <span class="text-rw-light-gray">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)} <button type="button" class="underline" onclick={() => (txBaris = txBaris.filter((_, j) => j !== i))}>hapus</button></span></li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="text-body-sm text-rw-light-gray">Belum ada baris, tambah item di bawah.</p>
+    {/if}
+    <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] md:items-end">
+      <label class="grid gap-1 text-body-sm">Item<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={txNama} placeholder="Jasa Drone" /></label>
+      <label class="grid gap-1 text-body-sm">Jenis<select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={txJenis}><option value="jasa">jasa</option><option value="alat">alat</option><option value="biaya">biaya</option></select></label>
+      <label class="grid gap-1 text-body-sm">Qty<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" min="1" bind:value={txQty} /></label>
+      <label class="grid gap-1 text-body-sm">Harga (Rp)<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" type="number" min="0" bind:value={txHarga} /></label>
+      <button type="button" class="rounded-rw-control border border-rw-border-gray/40 px-5 py-2.5 text-body-sm max-md:py-3 max-md:w-full" onclick={txTambahBaris}>+ Baris</button>
+    </div>
+    <button class="rounded-rw-control bg-rw-accent px-6 py-2.5 text-body-sm text-rw-white disabled:opacity-50 md:col-span-2 md:justify-self-start max-md:w-full" type="submit" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan transaksi'}</button>
+  </form>
+{/snippet}
+
 <!-- Brief form body — rendered inside the Panel by bukaBrief(). Field set and
      bindings are unchanged from the previous inline form; only the container
      moved (antislop: a form's behaviour is not restyled by relocating it). -->
@@ -1383,43 +1419,43 @@
 {/snippet}
 
 {#snippet txRow(t)}
-  <tr class="border-b border-ash align-top scroll-mt-24 {openTransaksiId === t.id ? 'bg-canvas' : ''}">
-    <td class="px-3 py-3">
+  <tr class="border-b border-rw-border-gray/40 align-top scroll-mt-24 {openTransaksiId === t.id ? 'bg-rw-darker' : ''}">
+    <td class="px-3 py-2 max-md:py-3">
       <p class="text-body font-normal">{t.nama_project}</p>
-      {#if t.lokasi}<p class="text-caption text-graphite">{t.lokasi}</p>{/if}
+      {#if t.lokasi}<p class="text-caption text-rw-light-gray">{t.lokasi}</p>{/if}
     </td>
-    <td class="px-3 py-3">
+    <td class="px-3 py-2 max-md:py-3">
       {t.nama_client}
-      {#if t.perusahaan_client}<p class="text-caption text-graphite">{t.perusahaan_client}</p>{/if}
+      {#if t.perusahaan_client}<p class="text-caption text-rw-light-gray">{t.perusahaan_client}</p>{/if}
     </td>
-    <td class="px-3 py-3">{t.tanggal_mulai ? `${tgl(t.tanggal_mulai)}${t.tanggal_selesai && t.tanggal_selesai !== t.tanggal_mulai ? ` – ${tgl(t.tanggal_selesai)}` : ''}` : '—'}</td>
-    <td class="px-3 py-3 text-right">{rupiah(t.total)}</td>
-    <td class="px-3 py-3"><span class="rounded-pill px-3 py-1 text-caption {chipCls(t.status)}">{t.status}</span></td>
-    <td class="px-3 py-3">
-      <div class="flex flex-wrap justify-end gap-3">
+    <td class="px-3 py-2 whitespace-nowrap max-md:py-3">{t.tanggal_mulai ? `${tgl(t.tanggal_mulai)}${t.tanggal_selesai && t.tanggal_selesai !== t.tanggal_mulai ? ` – ${tgl(t.tanggal_selesai)}` : ''}` : '—'}</td>
+    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3">{rupiah(t.total)}</td>
+    <td class="px-3 py-2 max-md:py-3"><span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(t.status)}">{t.status}</span></td>
+    <td class="px-3 py-2 max-md:py-3">
+      <div class="flex flex-wrap items-center justify-end gap-3">
         {#if t.status === 'terjadwal'}
-          <button class="underline scroll-mt-32" onclick={() => statusTransaksi(t, 'berjalan')}>Mulai</button>
+          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => statusTransaksi(t, 'berjalan')}>Mulai</button>
         {:else if t.status === 'berjalan'}
-          <button class="underline scroll-mt-32" onclick={() => statusTransaksi(t, 'selesai')}>Selesai</button>
+          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => statusTransaksi(t, 'selesai')}>Selesai</button>
         {:else if t.status === 'selesai' && !t.invoice_terbit}
-          <button class="underline scroll-mt-32" onclick={() => terbitkan(t)}>Terbitkan</button>
+          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => terbitkan(t)}>Terbitkan</button>
         {/if}
-        <button class="underline scroll-mt-32" onclick={() => bukaTransaksi(t)}>{openTransaksiId === t.id ? 'Tutup' : 'Rincian'}</button>
+        <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bukaTransaksi(t)}>{openTransaksiId === t.id ? 'Tutup' : 'Rincian'}</button>
       </div>
     </td>
   </tr>
   {#if openTransaksiId === t.id}
-  <tr class="bg-canvas"><td colspan="6" class="px-3 py-4">
+  <tr class="bg-rw-darker"><td colspan="6" class="px-3 py-4">
     <div class="grid gap-2">
       {#each txGrup(t) as g (g.kategori)}
-        <p class="text-caption uppercase text-graphite">{g.kategori} — subtotal {rupiah(g.subtotal)}</p>
+        <p class="text-caption uppercase text-rw-light-gray">{g.kategori} — subtotal {rupiah(g.subtotal)}</p>
         <ul class="grid gap-1 text-body-sm">
           {#each g.baris as b (b.id)}
-            <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-graphite">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)}</span></li>
+            <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-rw-light-gray">[{b.jenis}]</span></span><span class="tabular-nums">{rupiah(b.qty * b.harga_satuan)}</span></li>
           {/each}
         </ul>
       {/each}
-      {#if !txGrup(t).length}<p class="text-body-sm text-graphite">Tanpa baris.</p>{/if}
+      {#if !txGrup(t).length}<p class="text-body-sm text-rw-light-gray">Tanpa baris.</p>{/if}
     </div>
     <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
       <button class="underline" onclick={() => bukaBrief(t)} data-brief-toggle>Brief</button>
@@ -1698,13 +1734,14 @@
 <dialog
   bind:this={panelEl}
   data-panel
+  aria-labelledby="panel-judul"
   onclose={tutupPanel}
   onclick={panelKlikLuar}
   class="panel inset-0 m-0 h-dvh w-screen max-h-none max-w-none border-0 bg-transparent p-0 text-rw-off-white"
 >
   <div class="ml-auto flex h-dvh w-screen flex-col border-l border-rw-border-gray/40 bg-rw-charcoal md:w-[480px]">
     <div class="flex items-center justify-between gap-4 border-b border-rw-border-gray/40 px-5 py-4">
-      <h2 class="text-subheading">{panelTitle}</h2>
+      <h2 id="panel-judul" class="text-subheading">{panelTitle}</h2>
       <button class="rounded-rw-control p-2 text-rw-light-gray hover:text-rw-off-white" aria-label="Tutup panel" onclick={tutupPanel}>
         <X size={18} strokeWidth={1.75} aria-hidden="true" />
       </button>
@@ -2093,61 +2130,32 @@
     <section class="mt-8" data-view="transaksi">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-subheading font-normal">Transaksi</h2>
-        <button class="rounded-pill bg-navy-ink px-5 py-3 text-body-sm text-bone-white" onclick={bukaWalkin} data-walkin-toggle>
-          {walkinOpen ? 'Tutup' : '+ Walk-in'}
+        <button class="rounded-rw-control bg-rw-accent px-5 py-2.5 text-body-sm text-rw-white max-md:py-3" onclick={bukaWalkin} data-walkin-toggle>
+          + Walk-in
         </button>
       </div>
 
-      {#if walkinOpen}
-      <form class="mt-4 grid gap-4 border border-ash bg-bone-white p-4" onsubmit={simpanTransaksi} data-walkin-form>
-        <div class="grid gap-4 max-md:grid-cols-1 md:grid-cols-2">
-          <label class="grid gap-1 text-body-sm">Nama project<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" required bind:value={txProject} placeholder="Drone Bandar Baru" /></label>
-          <label class="grid gap-1 text-body-sm">Nama client<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" required bind:value={txClient} placeholder="Pak Suhaimi" /></label>
-          <label class="grid gap-1 text-body-sm">Tanggal mulai<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="date" bind:value={txMulai} /></label>
-          <label class="grid gap-1 text-body-sm">Tanggal selesai<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="date" bind:value={txSelesai} /></label>
-          <label class="grid gap-1 text-body-sm md:col-span-2">Lokasi<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={txLokasi} placeholder="Bandar Baru" /></label>
-        </div>
-        {#if txBaris.length}
-          <ul class="grid gap-1 text-body-sm">
-            {#each txBaris as b, i (i)}
-              <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} <span class="text-graphite">[{b.jenis}]</span></span><span>{rupiah(b.qty * b.harga_satuan)} <button type="button" class="underline" onclick={() => (txBaris = txBaris.filter((_, j) => j !== i))}>hapus</button></span></li>
-            {/each}
-          </ul>
-        {:else}
-          <p class="text-body-sm text-graphite">Belum ada baris — tambah item di bawah.</p>
-        {/if}
-        <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] md:items-end">
-          <label class="grid gap-1 text-body-sm">Item<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={txNama} placeholder="Jasa Drone" /></label>
-          <label class="grid gap-1 text-body-sm">Jenis<select class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" bind:value={txJenis}><option value="jasa">jasa</option><option value="alat">alat</option><option value="biaya">biaya</option></select></label>
-          <label class="grid gap-1 text-body-sm">Qty<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="1" bind:value={txQty} /></label>
-          <label class="grid gap-1 text-body-sm">Harga (Rp)<input class="rounded-none border border-ash bg-bone-white px-3 py-3 text-body-sm" type="number" min="0" bind:value={txHarga} /></label>
-          <button type="button" class="rounded-pill border border-ash px-5 py-3 text-body-sm max-md:w-full" onclick={txTambahBaris}>+ Baris</button>
-        </div>
-        <button class="rounded-pill bg-navy-ink px-6 py-3 text-body-sm text-bone-white disabled:opacity-50 md:justify-self-start max-md:w-full" type="submit" disabled={busy}>{busy ? '…' : 'Simpan transaksi'}</button>
-      </form>
-      {/if}
-
       {#if !transaksi.length}
-        <p class="mt-4 text-body-sm text-graphite">Belum ada transaksi. Mulai lewat tombol “+ Walk-in” di atas.</p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Belum ada transaksi. Mulai lewat tombol “+ Walk-in” di atas.</p>
       {:else}
       <div class="mt-4 flex flex-wrap gap-3">
-        <input class="min-w-40 flex-1 rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" placeholder="Cari project / client / lokasi" bind:value={txSearch} data-tx-search />
-        <select class="rounded-none border border-ash bg-bone-white px-3 py-2 text-body-sm" bind:value={txStatusFilter} data-tx-status>
+        <input class="min-w-40 flex-1 rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm placeholder:text-rw-light-gray max-md:py-3" placeholder="Cari project / client / lokasi" bind:value={txSearch} data-tx-search />
+        <select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm max-md:py-3" bind:value={txStatusFilter} data-tx-status>
           <option value="semua">semua status</option>
           {#each TX_STATUSES as s (s)}<option value={s}>{s}</option>{/each}
         </select>
       </div>
 
       {#if !txFiltered.length}
-        <p class="mt-4 text-body-sm text-graphite">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { txSearch = ''; txStatusFilter = 'semua'; }}>Reset</button></p>
+        <p class="mt-4 text-body-sm text-rw-light-gray">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { txSearch = ''; txStatusFilter = 'semua'; }}>Reset</button></p>
       {:else}
-      <div class="mt-4 overflow-x-auto">
-        <!-- Wrapper overflow-x jadi scroll container juga di sumbu blok, jadi
-             thead sticky hanya mengikat dari md ke atas (mobile: header ikut
-             scroll bareng tabel — tabelnya pendek + toolbar tetap kelihatan). -->
+      <!-- Rail table (ticket 04): dense on desktop, comfortable to tap on mobile.
+           The overflow wrapper is the scroll container, so the thead sticks only
+           from md up (mobile keeps its short header scrolling with the body). -->
+      <div class="mt-4 overflow-x-auto rounded-rw-card border border-rw-border-gray/40">
         <table class="w-full min-w-[640px] border-collapse text-body-sm">
-          <thead class="bg-bone-white md:sticky md:top-0">
-            <tr class="border-b border-ash text-left">
+          <thead class="bg-rw-charcoal md:sticky md:top-0">
+            <tr class="border-b border-rw-border-gray/40 text-left text-rw-light-gray">
               <th class="px-3 py-2 font-normal">Project</th>
               <th class="px-3 py-2 font-normal">Client</th>
               <th class="px-3 py-2 font-normal">Tgl event</th>
