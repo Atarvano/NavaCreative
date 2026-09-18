@@ -1,8 +1,5 @@
-<!-- DashboardApp Ember: layout comot dari index.html agyfdashboard.
-     Sidebar 256px + header + main 7 view + slide-drawer + print modal + toast.
-     Beda disengaja (bukan redesign): data dari store/API (bukan localStorage),
-     brand Nava, tanpa tombol demo/simulasi, tanpa font cuma pajangan
-     (selector font jalan beneran), judul header ikut view aktif. -->
+<!-- Ember DashboardApp: layout extracted from agyfdashboard index.html.
+     Uses API data instead of localStorage, header title follows active view. -->
 <script>
   import { onMount, onDestroy } from "svelte";
   import { state as store, load, logout, muatRingkasan, pulihkanDraft401 } from "./lib/store.svelte.js";
@@ -41,12 +38,12 @@
 
   const DRAWER_JUDUL = {
     walkin: "Buat Job Sewa Langsung (Walk-in)",
-    rab: null, // dinamis: ubah vs baru
-    brief: null, // dinamis: nama project
+    rab: null, // Dynamic: edit vs new
+    brief: null, // Dynamic: project name
     pay: null,
     tempo: null,
     correction: null,
-    package: null, // dinamis
+    package: null, // Dynamic
     gear: "Tambah Unit Alat Multimedia Baru",
   };
 
@@ -88,7 +85,7 @@
     }
   }
 
-  // store.error/notice -> toast (sekali tampil, lalu kosongkan).
+  // Toast mapped from store.error/notice (display once, then clear).
   $effect(() => {
     if (store.error) {
       const msg = store.error;
@@ -119,7 +116,7 @@
       await muatRingkasan();
       const h = viewDariHash();
       navView.current = h && VIEW_KEYS.includes(h) ? h : "ringkasan";
-      // Draft 401 yang terselamatkan dibuka kembali di drawer-nya.
+      // Rescued 401 drafts reopen in their respective drawers.
       const { tx, rb, br } = pulihkanDraft401();
       if (tx) openDrawer("walkin", null, tx);
       else if (rb) openDrawer("rab", null, rb);

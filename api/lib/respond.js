@@ -1,12 +1,4 @@
-// Shared JSON response envelope (ticket 05): every route answered with the
-// same two shapes but spelled them out by hand.
-//
-//   success: c.json(payload)            or  c.json(payload, 201)
-//   error:   c.json({ error: msg }, s)  with s in { 400, 401, 404, 409 }
-//
-// These wrappers are deliberate one-liners over `c.json`. They do not touch
-// the status code, the error string or the payload — the exact bytes Hono
-// emitted before are the exact bytes it emits now.
+// Wrappers do not change bytes Hono emitted.
 
 // 200 success (or an explicit status for 201 creates).
 export const ok = (c, payload, status = 200) => c.json(payload, status);

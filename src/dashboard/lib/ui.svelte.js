@@ -1,6 +1,5 @@
-// UI shell state untuk dashboard Ember: drawer, print modal, toast, nav mobile.
-// Satu modul rune agar semua view/drawer baca langsung tanpa prop drilling.
-// Bukan domain data (itu di store.svelte.js): ini murni UI state.
+// Ember dashboard UI shell state: drawer, print modal, toast, mobile nav.
+// Single rune module to avoid prop drilling. Purely UI state, not domain data.
 
 export const ui = $state({
   mobileNav: false,

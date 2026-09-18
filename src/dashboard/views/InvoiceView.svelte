@@ -1,8 +1,5 @@
-<!-- View Invoice Ember: comot struktur index.html.
-     Mapping backend: nomor/total/dibayar/sisa/jatuh_tempo/status/overdue
-     dari API; nama klien join dari transaksi induk (API list tak bawa nama).
-     Expand = riwayat bayar (label server) + koreksi (jumlah minus) + tombol
-     Bayar/Tempo/Koreksi/Cetak/Batal. Void pakai confirm seperti prototipe. -->
+<!-- Ember Invoice View: extracted from index.html structure.
+     Maps backend fields and joins client name from parent transaction. Void requires confirmation. -->
 <script>
   import { onMount } from "svelte";
   import { state as store, muatInvoice, voidInvoice } from "../lib/store.svelte.js";
@@ -38,7 +35,7 @@
     return rows;
   });
 
-  // Titipan Ringkasan: filter + buka barisnya (perhatian overdue).
+  // Dashboard Summary handoff: apply filters and expand relevant rows (e.g., overdue).
   onMount(() => {
     if (pendingFilter.invoice) {
       search = "";

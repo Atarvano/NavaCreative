@@ -1,8 +1,5 @@
-<!-- LoginApp Ember: comot kartu login index.html agyfdashboard.
-     Beda disengaja (bukan redesign): brand Nava (R-38), tanpa kredensial
-     default tampil dan tanpa tombol demo (R-36), tanpa simulasi 401,
-     flow 2-step + sesi cookie asli ikut LoginApp lama. Kartu + mark +
-     kelas ditempel dari prototipe. -->
+<!-- Ember LoginApp: extracted from agyfdashboard index.html login card.
+     Follows 2-step flow + cookie session from original LoginApp. -->
 <script>
   import { onMount } from "svelte";
 
@@ -13,8 +10,7 @@
   let confirmPassword = $state("");
   let error = $state("");
   let busy = $state(false);
-  // Draft 401 yang terselamatkan: tampil sebagai banner kuning (sebelumnya
-  // rescue-banner di index.html), hilang setelah login sukses / gagal.
+  // Rescued 401 draft: displays as a yellow banner, disappears after login attempt.
   let rescued = $state(false);
 
   async function post(path, body) {
@@ -77,7 +73,7 @@
     }
   }
 
-  // Sudah login = langsung dashboard (pola lama). Draft 401 = tandai banner.
+  // Already logged in = redirect to dashboard. Draft 401 = flag banner.
   onMount(async () => {
     try {
       const me = await fetch("/api/auth/me");

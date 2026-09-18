@@ -3,11 +3,8 @@ import { first, all, run, dbOf } from "../lib/db.js";
 import { ok, fail } from "../lib/respond.js";
 import { isDate } from "../validate.js";
 
-// Invoice router (ticket #45, issue #45): issue one Invoice per Transaksi +
-// payments + void. Rows live on the Transaksi (Q21): issue snapshots the
-// total + sets transaksi.invoice_terbit, which locks the rows. Nomor
-// INV-YYYY-NNNN from the id (B6). Labels DP/Cicilan/Pelunasan derived (B3).
-// Overdue derived (Q17, status only). Corrections via minus rows (M1).
+// Invoice router: one invoice per Transaksi, payments, and void.
+// Labels like DP, Installment, and Settlement are derived.
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -153,8 +150,8 @@ export function invoiceRoutes(app) {
     return ok(c, await withBayar(dbOf(c), upd), 201);
   });
 
-  // Ubah jatuh tempo (redesign #57): full invoice out, validasi gaya sibling.
-  // 404 bila tak ada, 400 bila format bukan YYYY-MM-DD, 401 tertutup guard.
+  // Change due date: full invoice out, sibling-style validation.
+  // Returns 404 if not found, 400 for bad format, 401 caught by guard.
   app.patch("/api/invoice/:id", requireSession, async (c) => {
     const id = Number(c.req.param("id"));
     const inv = await first(dbOf(c), "SELECT * FROM invoice WHERE id = ?", id);

@@ -1,8 +1,5 @@
-<!-- Editor baris bersama untuk Walk-in, RAB, dan Paket.
-     Satu tipe baris untuk semua: jenis (Alat/Jasa/Biaya), picker alat saat
-     jenis=alat, nama, qty, satuan, tarif. Kategori backend (PRODUCTION...)
-     dipertahankan diam-diam, default PRODUCTION, karena prototipe tidak
-     menampilkannya dan backend default-nya sama. Kelas comot prototipe. -->
+<!-- Shared row editor for Walk-in, RAB, and Packages.
+     Retains implicit backend categories (default: PRODUCTION) since they match prototype defaults. -->
 <script>
   let { value = $bindable([]), alat = [] } = $props();
 

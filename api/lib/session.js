@@ -1,9 +1,5 @@
-// Shared session guard + cookie handling (ticket 05): "is this request
-// authenticated" had eight near-copies; it now has one implementation.
-//
-// The guard moved here verbatim from auth.js — same cookie name, same TTL,
-// same JOIN, same expiry rule, same 401 body `{ error: 'Sesi tidak valid.
-// Silakan login.' }`. Do not reword that string.
+// Session guard and cookie handling.
+// Do not reword the 401 string.
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import { first, run, dbOf } from "./db.js";

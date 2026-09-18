@@ -1,8 +1,5 @@
-<!-- Drawer Walk-in Ember: comot buildWalkinForm prototipe.
-     Beda backend (field mapping, bukan redesign): nama_project/nama_client/
-     tanggal_mulai/tanggal_selesai/lokasi + baris {jenis,alat_id,nama,qty,
-     satuan,harga_satuan}. Diskon tidak ada di walk-in (API default 0).
-     Peringatan bentrok realtime ikut prototipe (helper bentrok.js). -->
+<!-- Ember Walk-in Drawer: extracted from prototype buildWalkinForm.
+     Maps explicit backend fields and retains realtime conflict warnings. Diskon defaults to 0. -->
 <script>
   import { onMount, onDestroy } from "svelte";
   import { state as store, simpanTransaksi } from "../../lib/store.svelte.js";
@@ -31,7 +28,7 @@
   const alat = $derived(store.alat);
   const total = $derived(subtotal(baris));
 
-  // Peringatan bentrok realtime per baris alat (sebelum simpan).
+  // Realtime conflict warnings for gear rows (before save).
   const bentrokList = $derived(
     baris.flatMap((b) =>
       b.jenis === "alat" && b.alat_id

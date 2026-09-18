@@ -1,8 +1,5 @@
-<!-- View Transaksi Ember: comot struktur index.html.
-     Mapping backend: nama_project/nama_client/tanggal_mulai/tanggal_selesai/
-     lokasi + baris backend; invoice_terbit mengunci tombol terbitkan;
-     tombol Brief buka drawer. Search + filter status + sort ikut prototipe
-     (tambah opsi aktif = terjadwal+berjalan untuk lompatan kartu Ringkasan). -->
+<!-- Ember Transaction View: extracted from index.html structure.
+     Maps API fields; invoice_terbit locks the publish button. Filters and sorting follow prototype. -->
 <script>
   import { onMount } from "svelte";
   import { state as store, statusTransaksi, terbitkan } from "../lib/store.svelte.js";
@@ -33,7 +30,7 @@
     return rows;
   });
 
-  // Terima titipan filter + expand dari Ringkasan (kartu + item perhatian).
+  // Apply filters and expand state from Summary handoff (cards + alert items).
   onMount(() => {
     if (pendingFilter.transaksi) {
       search = "";

@@ -1,16 +1,12 @@
-// Deteksi bentrok jadwal alat: satu alat_id di dua job terjadwal/berjalan
-// yang tanggalnya tumpang tindih. Pure, tanpa store: pemanggil menyetor
-// daftar transaksi + daftar alat untuk nama. Backend juga mengembalikan
-// `bentrok` saat simpan (Q16); helper ini untuk peringatan SEBELUM simpan
-// (form walk-in) dan lencana di tabel + kartu Perhatian.
+// Detect equipment schedule conflicts (overlapping dates for one equipment in active jobs).
+// Pure, no store. Gives warnings BEFORE save (walk-in form) and badges in tables/cards.
 
 const AKTIF = ["terjadwal", "berjalan"];
 
 const overlap = (a1, a2, b1, b2) =>
   a1 && a2 && b1 && b2 && a1 <= b2 && a2 >= b1;
 
-// Semua job yang berebut satu alat pada rentang tanggal. Dipakai form
-// walk-in (peringatan realtime) sebelum POST.
+// All jobs competing for one equipment in a date range. Used by walk-in form (realtime warning) before POST.
 export function cariBentrok(transaksi, excludeId, alatId, mulai, selesai) {
   if (!alatId || !mulai || !selesai) return [];
   return (transaksi ?? []).filter(
@@ -22,9 +18,8 @@ export function cariBentrok(transaksi, excludeId, alatId, mulai, selesai) {
   );
 }
 
-// Sapuan pasangan job aktif yang berebut alat. Dipakai Ringkasan
-// (kartu Perhatian) dan lencana tabel Transaksi. Nama alat dari daftar alat,
-// fallback ke nama baris bila alat sudah diarsip.
+// Sweep active job pairs competing for equipment. Used by Summary cards and Transaction badges.
+// Equipment names come from equipment list, falling back to line name if archived.
 export function semuaBentrok(transaksi, alat = []) {
   const aktif = (transaksi ?? []).filter(
     (t) => AKTIF.includes(t.status) && t.tanggal_mulai && t.tanggal_selesai,

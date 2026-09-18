@@ -1,5 +1,5 @@
-<!-- Drawer Tempo Ember: comot buildTempoForm prototipe.
-     Tanpa kolom alasan (API hanya terima jatuh_tempo). Overdue turunan tempo. -->
+<!-- Ember Tempo Drawer: extracted from prototype buildTempoForm.
+     Omit reason column as API only accepts jatuh_tempo. Overdue is derived from tempo. -->
 <script>
   import { simpanTempo } from "../../lib/store.svelte.js";
   import { tgl } from "../../lib/format.js";

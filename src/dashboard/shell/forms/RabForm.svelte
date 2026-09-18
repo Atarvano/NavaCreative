@@ -1,8 +1,5 @@
-<!-- Drawer RAB Ember: comot buildRABForm prototipe.
-     Mapping backend (bukan redesign): nama_project/nama_client/
-     perusahaan_client/tanggal_rab/diskon/catatan + baris backend.
-     Tanpa validUntil (API tidak punya) dan tanpa clientContact
-     (pakai perusahaan_client). Salin-dari-paket via /ke-rab. -->
+<!-- Ember RAB Drawer: extracted from prototype buildRABForm.
+     Omit validUntil and clientContact (using perusahaan_client instead) per API limits. -->
 <script>
   import { onMount, onDestroy } from "svelte";
   import { state as store, simpanRab, ubahRab, dariPaket } from "../../lib/store.svelte.js";

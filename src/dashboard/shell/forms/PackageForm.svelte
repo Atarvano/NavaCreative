@@ -1,6 +1,5 @@
-<!-- Drawer Paket Ember: comot buildPackageForm prototipe.
-     Field backend: nama + deskripsi + baris (tanpa kategori tampil,
-     default PRODUCTION diam-diam seperti drawer lain). -->
+<!-- Ember Package Drawer: extracted from prototype buildPackageForm.
+     Implicit backend category defaults to PRODUCTION. -->
 <script>
   import { simpanPaket } from "../../lib/store.svelte.js";
   import { closeDrawer } from "../../lib/ui.svelte.js";

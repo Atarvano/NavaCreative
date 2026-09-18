@@ -1,8 +1,5 @@
-<!-- View RAB Ember: comot struktur index.html.
-     Mapping backend: nomor/tanggal_rab/nama_project/nama_client + baris;
-     tanpa validUntil (API tidak punya). Status via PATCH langsung (Ditolak
-     dan Revisi ikut prototipe), approved terkunci lalu tombol Jadikan
-     Transaksi. Cetak ikut lembar RAB Ember. -->
+<!-- Ember RAB View: extracted from index.html structure.
+     Maps API fields without validUntil. Status is patched directly; approved status locks editing and enables transaction creation. -->
 <script>
   import { state as store, statusRab, setujui } from "../lib/store.svelte.js";
   import { rupiah, tgl } from "../lib/format.js";

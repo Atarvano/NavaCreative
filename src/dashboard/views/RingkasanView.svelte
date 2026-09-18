@@ -1,8 +1,5 @@
-<!-- View Ringkasan Ember: comot struktur index.html.
-     Data dari /api/ringkasan (kas bulan ini, piutang, per_alat, job_aktif,
-     overdue + belum_lunas, recent), bukan hitungan localStorage.
-     Bendanya: pendingFilter untuk lompatan terfilter, pendingExpand untuk
-     membuka baris dari Perhatian/Transaksi terbaru, bentrok dari helper. -->
+<!-- Ember Summary View: extracted from index.html structure.
+     Uses /api/ringkasan for metrics. Handoffs use pendingFilter/pendingExpand to jump to filtered rows. -->
 <script>
   import { state as store } from "../lib/store.svelte.js";
   import { pendingFilter, pendingExpand, go } from "../lib/nav.svelte.js";
@@ -12,7 +9,7 @@
   const ringkasan = $derived(store.ringkasan);
   const bulan = $derived(bulanLabel(ringkasan?.kas_bulan));
 
-  // Perhatian = overdue + bentrok jadwal (ikut prototipe: dua sumber).
+  // Alerts = overdue + schedule conflicts (follows prototype: two sources).
   const bentroks = $derived(semuaBentrok(store.transaksi, store.alat));
   const overdueList = $derived(
     (ringkasan?.belum_lunas ?? []).filter((b) => isOverdue(b.jatuh_tempo, b.sisa)),

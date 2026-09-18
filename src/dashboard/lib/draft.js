@@ -1,7 +1,5 @@
-// Draft stash for the dashboard builders (spec: ticket 06).
-// localStorage-only; keys and snapshot shapes are load-bearing — the 401
-// rescue path (lib/api.js) and the onMount restore path both read them.
-// Key format is `nava-draft-<key>`; do not rename.
+// Draft stash for dashboard builders (spec: ticket 06). Key format is `nava-draft-<key>`.
+// localStorage-only; load-bearing for 401 rescue and onMount restore.
 
 export function stashDraft(key, value) {
   try {

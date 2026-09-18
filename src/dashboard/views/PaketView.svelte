@@ -1,6 +1,5 @@
-<!-- View Paket Ember: comot struktur index.html.
-     Data dari API (nama/deskripsi/baris/total). Buat RAB dari Paket via
-     /ke-rab lalu buka drawer RAB terisi (ikut prototipe). -->
+<!-- Ember Package View: extracted from index.html structure.
+     Creates RAB from package via /ke-rab API and opens pre-filled RAB drawer. -->
 <script>
   import { state as store, dariPaket } from "../lib/store.svelte.js";
   import { subtotal, subJenis, rupiah } from "../lib/format.js";

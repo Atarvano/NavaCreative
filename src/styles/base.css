@@ -1,11 +1,5 @@
-/* ==========================================================================
-   NAVA CREATIVE - base layer (ticket 01, cutover ticket 06)
-   Global rules carried over from the deleted styles.css; values identical,
-   zero visual change. Token vars (--color-*, --text-*, --font-*) resolve
-   from the @theme block in theme.css; only layout vars are declared here.
-   The section padding hardcodes 112px (was var(--spacing-112)) so base
-   never depended on the legacy sheet.
-   ========================================================================== */
+/* NAVA CREATIVE - base layer
+   Global rules from deleted styles.css. Token vars resolve from theme.css; layout vars declared here. */
 
 :root {
   --nav-h: 68px;
@@ -123,9 +117,7 @@ section {
   }
 }
 
-/* --------------------------------------------------------------------------
-   Reveal initial states (JS animates to visible; no-JS/reduced shows content)
-   -------------------------------------------------------------------------- */
+/* Reveal initial states (JS animates to visible; no-JS/reduced shows content) */
 /* Svelte shell: content renders statically until each component's animation
    owns its own initial states. */
 body:not(.no-js):not(.reduced):not(.svelte-shell) [data-reveal] {
@@ -222,9 +214,7 @@ body.menu-locked {
   }
 }
 
-/* --------------------------------------------------------------------------
-   Reduced motion: static page, everything visible
-   -------------------------------------------------------------------------- */
+/* Reduced motion: static page, everything visible */
 /* no-js / JS-disabled gates (were in the legacy sheet; kept here so the
    preloader can never trap the page once styles.css is deleted) */
 body.no-js .preloader,

@@ -3,13 +3,8 @@ import { first, all, run, dbOf } from "../lib/db.js";
 import { ok, fail } from "../lib/respond.js";
 import { isNonNegInt, isDate, validBaris } from "../validate.js";
 
-// RAB router (ticket #43, issue #43): RAB CRUD + status flow + one-click
-// approve into a Transaksi. Rows snapshot name/rate at creation (Q21 chain:
-// paket → RAB → transaksi all carry their own copies). Nomor RAB-YYYY-NNNN
-// derived from the AUTOINCREMENT id (B6): insert → format → update, so rapid
-// double-POST can never collide. No DELETE (M1): rejected RABs stay as
-// history. Transaksi rows land here so approve works end to end; walk-in
-// creation + lifecycle + Brief arrive in #44.
+// RAB router: CRUD, status flow, and one-click approve into a Transaksi.
+// Rows snapshot at creation. Rejected RABs stay as history. No DELETE.
 
 const STATUS = ["draft", "sent", "approved", "rejected"];
 

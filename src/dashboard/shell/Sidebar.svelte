@@ -1,15 +1,11 @@
-<!-- Sidebar Ember: ditempel plek dari index.html agyfdashboard.
-     Beda disengaja (bukan redesign): brand Nava (data asli, R-38).
-     Tombol Simulasi 401 dihapus total. Label nav, kelas, ikon, urutan,
-     dan gaya aktif (JS prototipe: bg-stone-200/70 + text-[#C2410C] +
-     font-semibold + border-l-[3px] border-[#C2410C]) ditempel apa adanya.
-     Item non-aktif transparan, hover baru ada bg (hover:bg-stone-100). -->
+<!-- Ember Sidebar: extracted from agyfdashboard index.html.
+     Uses original Nava branding (R-38) and retains original navigation styles. -->
 <script>
   import { NAV } from "../lib/nav.svelte.js";
 
   let { view, me, mobileOpen, onPilih, onLogout } = $props();
 
-  // Gaya aktif = navigate() prototipe: tambah 4 kelas, lepas 3 kelas.
+  // Active style follows prototype navigate(): adds 4 classes, removes 3.
   const itemCls = (v) =>
     v === view
       ? "bg-stone-200/70 text-[#C2410C] font-semibold border-l-[3px] border-[#C2410C]"

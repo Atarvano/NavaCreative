@@ -8,14 +8,8 @@ import {
 import { first, run, dbOf } from "../lib/db.js";
 import { ok, fail } from "../lib/respond.js";
 
-// Auth router: Sesi = random session id in an HttpOnly cookie, backed by a
-// D1 row. Logout deletes the row. Passwords are SHA-256(salt + password)
-// via WebCrypto (Workers has no Node bcrypt); the salt lives per admin row.
-// ponytail: SHA-256 fast hash, upgrade to scrypt/Argon2 via a WASM build or
-// turnstile rate-limiting if brute-force becomes a real threat.
-//
-// The guard (requireSession), password hashing and cookie plumbing now live
-// in ../lib/session.js; this file is the /api/auth/* routes only.
+// Auth router: Session is a random ID in an HttpOnly cookie backed by D1.
+// Passwords use SHA-256 with per-admin salt via WebCrypto.
 
 export function authRoutes(app) {
   app.post("/api/auth/login", async (c) => {

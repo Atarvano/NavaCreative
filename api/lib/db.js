@@ -1,15 +1,5 @@
-// Shared D1 access (ticket 05): the `prepare -> bind -> first/all/run` idiom
-// was re-derived in every router. It now has one home.
-//
-// ponytail: thin wrappers only — no retry, no caching, no transaction, no
-// rewriting of SQL text. Every call returns the raw D1 result (`null`,
-// `{ results }`, `{ meta }`), so no route's status code or body can shift.
-//
-// The helpers take a D1 handle, not the request context, so the same three
-// functions serve route handlers (`dbOf(c)`) and the per-entity helpers such
-// as withModal / withRows / withBayar (which already receive `db`).
-
-// The D1 binding from a Hono context.
+// Thin wrappers, no retry/caching/transaction.
+// Takes a D1 handle, not request context.
 export const dbOf = (c) => c.env.DB;
 
 // First row, or null when the query matches nothing.

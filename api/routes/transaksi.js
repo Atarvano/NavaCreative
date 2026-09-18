@@ -3,11 +3,8 @@ import { first, all, run, dbOf } from "../lib/db.js";
 import { ok, fail } from "../lib/respond.js";
 import { isNonNegInt, isDate, validBaris } from "../validate.js";
 
-// Transaksi router (ticket #44, issue #44): walk-in CRUD + lifecycle +
-// clash warning + Brief. Rows snapshot at creation (same shape as
-// rab.js). Warning bentrok (Q16): same alat_id on overlapping dates across
-// terjadwal/berjalan jobs (B1) → warning naming the job, save proceeds.
-// No DELETE (M1). Invoice lock of rows arrives in #45.
+// Transaksi router: walk-in CRUD, lifecycle, clash warning, and Brief.
+// Rows snapshot at creation. Clash warning on overlapping dates.
 
 const STATUS = ["terjadwal", "berjalan", "selesai", "batal"];
 const isOptDate = (v) => v === "" || v === undefined || isDate(v);
@@ -125,7 +122,7 @@ export function transaksiRoutes(app) {
     return ok(c, { ...full, bentrok }, 201);
   });
 
-  // Lifecycle: any -> any of STATUS. batal keeps history (no DELETE).
+  // Lifecycle: any -> any of STATUS. Cancelled keeps history (no DELETE).
   // Money fields (baris/diskon) lock once the invoice issues (Q21):
   // rejected loudly so no edit is silently dropped.
   app.patch("/api/transaksi/:id", requireSession, async (c) => {

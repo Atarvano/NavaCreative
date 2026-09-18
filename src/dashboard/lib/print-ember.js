@@ -1,18 +1,15 @@
-// Cetak dokumen Ember: kop terracotta + tabel A4 + tombol Cetak/Simpan PDF.
-// Pure terhadap store: terima record + snapshot settings + total yang sudah
-// dihitung pemanggil. Di-render sebagai snippet Svelte di PrintModal, bukan
-// window.print dari HTML mentah, agar tombol dan state ikut pola Svelte.
+// Print Ember documents: terracotta header + A4 table. Pure to the store:
+// receives record, settings snapshot, and caller-calculated totals. Rendered as Svelte snippet.
 
 import { rupiah, tgl, subJenis } from "./format.js";
 
-// Jalur logo kop: file statis public/img/logo-red.png (URL img/logo-red.png).
-// Sampai file disuplai, kop memakai teks nama studio. Ganti logo = taruh
-// file lalu deploy, tanpa ubah kode.
+// Header logo path: static file public/img/logo-red.png.
+// Uses studio name text until file is supplied. Replace logo by dropping file and deploying.
 export const LOGO_URL = "img/logo-red.png";
 export const EMBER = "#C2410C";
 
-// Header kop merah: slot logo + fallback teks, identitas dari settings.
-// Inline style + tabel agar konsisten di jendela cetak polos.
+// Red header: logo slot + text fallback, identity from settings.
+// Inline styles + tables ensure consistency in plain print windows.
 export function kop(settings, subjudul = "") {
   const s = settings ?? {};
   return `<table style="width:100%;border-collapse:collapse;border-bottom:2px solid ${EMBER};padding-bottom:12px;margin-bottom:16px"><tr>
@@ -31,8 +28,8 @@ export const CETAK_CSS = `body{font-family:Arial,Helvetica,sans-serif;max-width:
   table.layout{width:100%;border-collapse:collapse}
   .ember{color:${EMBER}}`;
 
-// Cetak lewat <iframe> tersembunyi same-origin: tanpa popup, tanpa redirect,
-// tidak bisa diblokir popup blocker. Dokumen + print() ditulis sekaligus.
+// Print via hidden same-origin <iframe>: no popup, no redirect, bypasses blockers.
+// Document and print() are written simultaneously.
 export function cetak(judul, body) {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
@@ -48,7 +45,7 @@ export function cetak(judul, body) {
   setTimeout(() => frame.remove(), 1000);
 }
 
-// --- Lembar RAB: kop + meta klien + tabel baris + subtotal jenis + total ---
+// RAB sheet: header + client meta + line items + category subtotals + total
 export function lembarRab(r, settings) {
   const rows = (r.baris ?? [])
     .map(
@@ -76,7 +73,7 @@ export function lembarRab(r, settings) {
     <p style="margin-top:16px;font-style:italic;color:#555">RAB bersifat estimasi; harga final dapat menyesuaikan scope project.</p>`;
 }
 
-// --- Lembar Invoice: kop + nomor + DARI/KEPADA + baris + bayar/sisa + bank ---
+// Invoice sheet: header + number + FROM/TO + line items + payments/balance + bank
 export function lembarInvoice(i, settings) {
   const rows = (i.baris ?? [])
     .map(
@@ -90,8 +87,8 @@ export function lembarInvoice(i, settings) {
         `<tr><td style="padding:5px 8px;border-bottom:1px solid #eee">${tgl(p.tanggal)}</td><td style="padding:5px 8px;border-bottom:1px solid #eee">${p.label}</td><td style="padding:5px 8px;border-bottom:1px solid #eee">${p.metode}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${rupiah(p.jumlah)}</td></tr>`,
     )
     .join("");
-  // Bank dari snapshot terbit: cetakan lama tak ikut berubah saat settings
-  // bank diganti kemudian. Fallback ke settings bila snapshot kosong.
+  // Bank from issue snapshot: old prints remain unchanged if bank settings
+  // are updated later. Fallback to settings if snapshot is empty.
   const bankTeks =
     i.bank_snapshot ||
     [settings.bank, settings.norek, settings.atas_nama]
@@ -126,7 +123,7 @@ export function lembarInvoice(i, settings) {
     <p style="color:#555">Pembayaran paling lambat 7 hari setelah invoice diterima.</p>`;
 }
 
-// --- Lembar Brief: kop + hanya field terisi ---
+// Brief sheet: header + only populated fields
 export function lembarBrief(t, brief, settings) {
   const b = brief ?? {};
   const row = (k, v) =>

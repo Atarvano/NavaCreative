@@ -3,11 +3,8 @@ import { first, all, run, dbOf } from "../lib/db.js";
 import { ok, fail } from "../lib/respond.js";
 import { isNonNegInt, isDate } from "../validate.js";
 
-// Alat router (ticket #41): Alat CRUD + servis records + derived Modal /
-// pendapatan / balik-modal. No DELETE anywhere: Alat is archived via
-// is_active (B4). Modal is derived (G2), never a column. Revenue counts
-// only transaksi_baris rows with jenis='alat' (Q13) — transaksi tables land
-// in issue #44, so until then pendapatan is 0 for every Alat.
+// Alat router: CRUD, service records, and derived capital/revenue/ROI.
+// No DELETE: archived via is_active. Revenue counts only alat rows.
 
 async function withModal(db, alat) {
   const servis = await first(

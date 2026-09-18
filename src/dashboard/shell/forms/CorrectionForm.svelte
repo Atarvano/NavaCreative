@@ -1,7 +1,5 @@
-<!-- Drawer Koreksi Ember: comot buildCorrectionForm prototipe.
-     Mapping backend (bukan redesign): API tidak punya endpoint koreksi
-     terpisah; koreksi = pembayaran minus (POST /bayar jumlah negatif, M1).
-     Kolom keterangan prototipe dipetakan ke referensi. -->
+<!-- Ember Correction Drawer: extracted from prototype buildCorrectionForm.
+     Corrections map to negative payments (POST /bayar) since there is no separate endpoint. -->
 <script>
   import { bayar } from "../../lib/store.svelte.js";
   import { hariIni } from "../../lib/format.js";

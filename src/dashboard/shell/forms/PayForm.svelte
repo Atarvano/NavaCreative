@@ -1,7 +1,5 @@
-<!-- Drawer Bayar Ember: comot buildPaymentForm prototipe.
-     Mapping backend (bukan redesign): metode hanya transfer|cash,
-     tambah kolom referensi (bukti transfer). Label DP/Cicilan/Pelunasan
-     dihitung server, jadi tidak ada select label. jumlah mengikuti sisa. -->
+<!-- Ember Payment Drawer: extracted from prototype buildPaymentForm.
+     Added reference column; Payment labels (DP/Installment) are server-calculated. -->
 <script>
   import { bayar } from "../../lib/store.svelte.js";
   import { rupiah, hariIni } from "../../lib/format.js";

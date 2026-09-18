@@ -1,6 +1,5 @@
-// HTTP client dashboard: fetch wrapper + cabang 401 draft-rescue (Q36).
-// Snapshot dibaca dari liveDraft (drawer yang sedang terbuka mendaftarkan
-// pembaca saat mount). Bukan dari props: drawer mount/unmount dinamis.
+// HTTP client dashboard: fetch wrapper + 401 draft-rescue branch (Q36).
+// Snapshot is read from liveDraft (open drawers register readers on mount).
 
 import { draftAda, stashDraft } from "./draft.js";
 import { readLive } from "./liveDraft.js";
@@ -11,7 +10,7 @@ export async function api(path, opts = {}) {
     headers: { "content-type": "application/json", ...(opts.headers ?? {}) },
   });
   if (res.status === 401) {
-    // Selamatkan draft builder sebelum pindah ke login.
+    // Rescue builder drafts before redirecting to login.
     try {
       const readers = readLive();
       const d = readers.tx();

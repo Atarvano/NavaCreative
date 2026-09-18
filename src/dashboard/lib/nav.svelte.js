@@ -1,11 +1,7 @@
-// Navigasi hash minimal untuk dashboard Ember: kunci view, filter sekali
-// pakai (lompatan kartu Ringkasan), expand sekali pakai, dan sinkron hash.
-// Tanpa hook registry: drawer ditutup langsung oleh shell saat view berganti,
-// tiap view me-reset UI-nya sendiri saat unmount. Bukan router (ADR-0006).
+// Minimal hash navigation: view keys, one-off filters, and hash sync.
+// Shell closes drawers on view change, views self-reset on unmount. Not a router (ADR-0006).
 
-// Label nav ditempel plek dari index.html prototipe ("RAB (Estimasi)",
-// "Paket Template"): yang tampil di sidebar adalah copy prototipe,
-// bukan istilah glossary yang dipadatkan.
+// Sidebar nav labels strictly match prototype copy instead of condensed glossary terms.
 export const NAV = [
   [
     "Operasional",
@@ -27,11 +23,10 @@ export const VIEW_KEYS = [
 
 export const view = $state({ current: "ringkasan" });
 
-// Filter titipan untuk lompatan antar view (kartu Ringkasan ke
-// Invoice/Transaksi terfilter). View tujuan membaca lalu mengosongkannya.
+// Pending filter for view jumps (e.g. Summary to Invoice). Target view reads then clears it.
 export const pendingFilter = $state({ invoice: null, transaksi: null });
 
-// Expand titipan (item Perhatian/Transaksi terbaru membuka barisnya).
+// Pending expand (e.g. Attention items opening their rows).
 export const pendingExpand = $state({ transaksi: null, invoice: null });
 
 export function go(v) {

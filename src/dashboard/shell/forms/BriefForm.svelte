@@ -1,7 +1,5 @@
-<!-- Drawer Brief Ember: comot buildBriefForm prototipe.
-     Mapping backend (bukan redesign): dos/donts/lokasi + style/notes yang
-     tidak ada di prototipe tapi ada di API (tampil dengan kelas yang sama).
-     Cetak ikut pola prototipe (tombol Cetak Brief Dokumen). -->
+<!-- Ember Brief Drawer: extracted from prototype buildBriefForm.
+     Maps API fields not present in prototype (dos/donts/lokasi/style/notes) to existing classes. -->
 <script>
   import { onMount, onDestroy } from "svelte";
   import { state as store, muatBrief, simpanBrief } from "../../lib/store.svelte.js";

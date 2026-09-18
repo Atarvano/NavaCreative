@@ -3,12 +3,8 @@ import { first, all, run, dbOf } from "../lib/db.js";
 import { ok, fail } from "../lib/respond.js";
 import { validBaris } from "../validate.js";
 
-// Paket router (ticket #42, issue #42): Paket template CRUD + rows.
-// Paket = template rincian (Q12): rows grouped by kategori (Q23), each row a
-// jenis alat|jasa|biaya (Q13) with qty units (G1) + free-text satuan.
-// alat_id set only where jenis=alat; jasa/biaya rows are free-text names.
-// Editing a Paket never rewrites past documents: RAB/Transaksi snapshot
-// rows at creation (#43+), so no cascade here. No DELETE (same rule as B4).
+// Paket router: template CRUD and rows.
+// Editing a Paket never rewrites past documents due to snapshots. No DELETE.
 
 async function withRows(db, paket) {
   const { results } = await all(

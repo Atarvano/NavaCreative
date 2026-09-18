@@ -28,8 +28,8 @@ import { showToast } from "./ui.svelte.js";
 // Re-exported so existing callers (the shell's onMount) keep one import site.
 export { api };
 
-// Ambil draft 401 yang terselamatkan (dipanggil shell sekali setelah load
-// awal). Toast + pembuka drawer jadi urusan pemanggil via openDrawer.
+// Retrieve rescued 401 drafts (called once by the shell after initial load).
+// Toast + drawer opening is the caller's concern via openDrawer.
 export function pulihkanDraft401() {
   const tx = ambilDraft("transaksi");
   const rb = ambilDraft("rab");
@@ -41,7 +41,7 @@ export function pulihkanDraft401() {
   return { tx: null, rb: null, br: null };
 }
 
-// --- State --------------------------------------------------------------
+// State
 export const state = $state({
   me: null,
   alat: [],
@@ -56,7 +56,7 @@ export const state = $state({
   busy: false,
 });
 
-// --- Load (the six-endpoint sequential fetch) ---------------------------
+// Load (six-endpoint sequential fetch)
 export async function load() {
   const { res, data } = await api("/api/alat");
   if (!res.ok) {
@@ -88,7 +88,7 @@ export async function logout() {
   location.href = "login.html";
 }
 
-// --- Alat ---------------------------------------------------------------
+// Alat
 export async function addAlat(payload) {
   const { res, data } = await api("/api/alat", {
     method: "POST",
@@ -147,7 +147,7 @@ export async function addServis(a, payload) {
   return data;
 }
 
-// --- Paket --------------------------------------------------------------
+// Paket
 export async function simpanPaket({ editing, targetId, payload }) {
   const { res, data } = await api(
     editing ? `/api/paket/${targetId}` : "/api/paket",
@@ -169,7 +169,7 @@ export async function simpanPaket({ editing, targetId, payload }) {
   return { ok: true, data };
 }
 
-// Buat RAB dari Paket: returns the copied rows; navigation stays in the view.
+// Create RAB from Paket: returns the copied rows; navigation stays in the view.
 export async function dariPaket(p) {
   const { res, data } = await api(`/api/paket/${p.id}/ke-rab`);
   if (!res.ok) {
@@ -179,7 +179,7 @@ export async function dariPaket(p) {
   return data;
 }
 
-// --- RAB ----------------------------------------------------------------
+// RAB
 export async function simpanRab(payload) {
   const { res, data } = await api("/api/rab", {
     method: "POST",
@@ -219,8 +219,8 @@ export async function setujui(r) {
   return data.transaksi_id;
 }
 
-// Ubah RAB: PATCH header + baris + diskon + catatan selagi belum approved
-// (approved terkunci di API, 409). Dipakai drawer Ubah di RabView.
+// Edit RAB: PATCH header + rows + discount + notes while not yet approved
+// (approved locked by API, 409).
 export async function ubahRab(id, payload) {
   const { res, data } = await api(`/api/rab/${id}`, {
     method: "PATCH",
@@ -235,7 +235,7 @@ export async function ubahRab(id, payload) {
   return { ok: true, data };
 }
 
-// --- Transaksi ----------------------------------------------------------
+// Transaksi
 export async function simpanTransaksi(payload) {
   const { res, data } = await api("/api/transaksi", {
     method: "POST",
@@ -285,7 +285,7 @@ export async function simpanBrief(transaksiId, payload) {
   return { ok: true, brief: data.brief };
 }
 
-// --- Invoice ------------------------------------------------------------
+// Invoice
 export async function terbitkan(t) {
   const jt = hariIniPlusLocal(7);
   const { res, data } = await api(`/api/transaksi/${t.id}/invoice`, {
@@ -345,7 +345,7 @@ export async function voidInvoice(i) {
   return res.ok;
 }
 
-// --- Settings -----------------------------------------------------------
+// Settings
 // Deliberately NO refetch (contract asymmetry #2): updates from the response.
 export async function simpanSettings(payload) {
   const { res, data } = await api("/api/settings", {
@@ -361,7 +361,7 @@ export async function simpanSettings(payload) {
   return { ok: true, settings: data.settings };
 }
 
-// --- local date helpers -------------------------------------------------
+// Local date helpers
 // Kept local (not imported from format.js) so the store has no dependency on
 // presentation helpers; behaviour is identical to format.js.
 function hariIniPlusLocal(n) {

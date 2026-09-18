@@ -1,8 +1,5 @@
-// Snapshot hidup untuk penyelamatan draft 401 (Q36).
-// Drawer yang sedang terbuka mendaftarkan pembaca snapshot-nya saat mount
-// dan melepasnya saat destroy. api.js memanggil lewat setDraftReaders yang
-// didaftarkan shell sekali di onMount. Bukan rune: modul polos cukup karena
-// hanya dibaca saat event 401, bukan untuk render.
+// Live snapshot for 401 draft rescue (Q36). Open drawers register snapshot readers on mount.
+// Plain module, not a rune, since it's only read during 401 events, not for rendering.
 
 const readers = { tx: () => ({}), rab: () => ({}), brief: () => null };
 

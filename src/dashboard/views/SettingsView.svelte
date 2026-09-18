@@ -1,16 +1,12 @@
-<!-- View Settings Ember: comot struktur index.html.
-     Mapping backend: nama/hp/email/bank/norek/atas_nama (tanpa alamat,
-     karena kolomnya tidak ada di settings). Tanpa tombol reset data
-     (prototipe localStorage-only; di backend reset = hapus database,
-     bukan aksi UI). Logo ikut pola lama: path statis + preview. -->
+<!-- Ember Settings View: extracted from index.html structure.
+     Maps basic fields (no address or data reset). Logo follows static path pattern. -->
 <script>
   import { state as store, simpanSettings } from "../lib/store.svelte.js";
   import { LOGO_URL } from "../lib/print-ember.js";
 
   let busy = $state(false);
 
-  // Buffer form disalin dari store agar batal = tutup tanpa simpan tidak
-  // perlu ada (satu tombol simpan seperti prototipe).
+  // Form buffer copies store data so cancellation just closes without saving (single save button per prototype).
   let f = $state({ nama: "", hp: "", email: "", bank: "", norek: "", atas_nama: "" });
   let seeded = $state(false);
 

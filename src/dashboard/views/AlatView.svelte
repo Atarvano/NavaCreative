@@ -1,8 +1,5 @@
-<!-- View Alat Ember: comot struktur index.html.
-     Mapping backend: nama/modal/pendapatan/tarif_event/balik_modal dari API
-     (modal turunan harga_beli+servis, bukan kolom). Tanpa kategori dan nomor
-     seri (kolomnya tidak ada di DB); tanpa revenue manual (dihitung dari
-     baris transaksi jenis alat). Servis: muat + catat ikut prototipe. -->
+<!-- Ember Gear View: extracted from index.html structure.
+     Maps API fields for nama/modal/pendapatan/tarif_event/balik_modal. Servis follows prototype. -->
 <script>
   import { state as store, addServis, arsipkan, aktifkan, muatServis } from "../lib/store.svelte.js";
   import { rupiah, tgl, breakEven, hariIni } from "../lib/format.js";
@@ -14,7 +11,7 @@
   let servis = $state({});
   let busyId = $state(null);
 
-  // Buffer form servis inline per alat (ikut prototipe: form di kartu).
+  // Inline service form buffer per gear (follows prototype pattern: form in card).
   let svTeknisi = $state("");
   let svTanggal = $state(hariIni());
   let svKeterangan = $state("");

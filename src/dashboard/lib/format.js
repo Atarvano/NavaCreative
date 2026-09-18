@@ -1,17 +1,16 @@
-// Ember dashboard helpers: rupiah, tanggal, matematika baris, badge.
-// Pure, tanpa store dan tanpa DOM. Baris selalu bentuk backend:
-// { jenis: 'alat'|'jasa'|'biaya', nama, qty, satuan, harga_satuan }.
+// Pure formatters for currency, dates, line math, and badges.
+// Lines always use backend shape: { jenis: 'alat'|'jasa'|'biaya', nama, qty, satuan, harga_satuan }.
 
 export const rupiah = (n) => "Rp " + Number(n ?? 0).toLocaleString("id-ID");
 
-// Satu-satunya penjumlahan baris untuk semua tabel dan drawer.
+// Single source of truth for line summation across all tables and drawers.
 export const subtotal = (baris) =>
   (baris ?? []).reduce(
     (t, b) => t + (Number(b.qty) || 0) * (Number(b.harga_satuan) || 0),
     0,
   );
 
-// Subtotal per jenis untuk kartu dan rincian (label gaya Ember: Alat/Jasa/Biaya).
+// Subtotals per type for cards and details (Ember-style labels: Alat/Jasa/Biaya).
 const JENIS_LABEL = { alat: "Alat", jasa: "Jasa", biaya: "Biaya" };
 export const subJenis = (baris) => {
   const s = { Alat: 0, Jasa: 0, Biaya: 0 };
@@ -22,7 +21,7 @@ export const subJenis = (baris) => {
   return s;
 };
 
-// Tanggal tampil Indonesia pendek: 2 Agu 2026. Input tetap type=date.
+// Short Indonesian date display (e.g., 2 Agu 2026). Inputs remain type=date.
 export const tgl = (iso) =>
   iso
     ? new Date(iso + "T00:00:00").toLocaleDateString("id-ID", {
@@ -32,11 +31,11 @@ export const tgl = (iso) =>
       })
     : "-";
 
-// Hari ini lokal YYYY-MM-DD (tanpa geser zona seperti toISOString).
-// ponytail: en-CA memberi format lokal tanpa padStart manual.
+// Local today YYYY-MM-DD without timezone shift.
+// Note: en-CA gives local format without manual padStart.
 export const hariIni = () => new Date().toLocaleDateString("en-CA");
 
-// Label kartu kas dari bulan yang dihitung API ("2026-09" -> "September 2026").
+// Cash card label from API month (e.g., "2026-09" -> "September 2026").
 export const bulanLabel = (ym) =>
   ym
     ? new Date(ym + "-02T00:00:00").toLocaleDateString("id-ID", {
@@ -48,7 +47,7 @@ export const bulanLabel = (ym) =>
 export const isOverdue = (jatuhTempo, sisa) =>
   Number(sisa) > 0 && !!jatuhTempo && hariIni() > jatuhTempo;
 
-// Badge balik modal 3 tingkat dari angka backend (modal + pendapatan).
+// 3-tier break-even badge from backend figures (capital + revenue).
 export const breakEven = (modal, pendapatan) => {
   const m = Number(modal) || 0;
   const p = Number(pendapatan) || 0;
@@ -69,7 +68,7 @@ export const breakEven = (modal, pendapatan) => {
   };
 };
 
-// Satu peta badge status untuk Transaksi, RAB, dan Invoice.
+// Unified status badge map for Transactions, RAB, and Invoices.
 const BADGE = {
   terjadwal: ["Terjadwal", "bg-amber-100 text-amber-900 border-amber-200"],
   berjalan: ["Berjalan", "bg-orange-100 text-[#C2410C] border-orange-200"],

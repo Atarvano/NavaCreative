@@ -1,7 +1,5 @@
-<!-- Drawer Alat Ember: comot buildGearForm prototipe.
-     Mapping backend (bukan redesign): API hanya terima nama, harga_beli,
-     tarif_event. Tanpa kategori dan nomor seri (kolomnya tidak ada di DB),
-     jadi form hanya tiga field ini dengan kelas yang sama. -->
+<!-- Ember Gear Drawer: extracted from prototype buildGearForm.
+     Omit category and serial numbers as API only accepts nama, harga_beli, and tarif_event. -->
 <script>
   import { addAlat } from "../../lib/store.svelte.js";
   import { closeDrawer } from "../../lib/ui.svelte.js";
