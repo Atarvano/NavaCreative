@@ -1,181 +1,243 @@
+<!-- View Transaksi Ember: comot struktur index.html.
+     Mapping backend: nama_project/nama_client/tanggal_mulai/tanggal_selesai/
+     lokasi + baris backend; invoice_terbit mengunci tombol terbitkan;
+     tombol Brief buka drawer. Search + filter status + sort ikut prototipe
+     (tambah opsi aktif = terjadwal+berjalan untuk lompatan kartu Ringkasan). -->
 <script>
-  // TransaksiView (spec: ticket 09). Extracted from DashboardApp.svelte's
-  // `{#if view === 'transaksi'}` block plus its `txRow` row snippet, moved as a
-  // unit. Markup unchanged byte-for-byte.
-  //
-  // Owns its UI state (search/filter/sort, expanded row, the loaded Brief).
-  // Data + mutations come from the store; the walk-in and Brief forms open in
-  // the shell's shared Panel, so those are passed in as callbacks.
-  import { rupiah, tgl, grupBaris, urutkan, rwChip } from '../lib/format.js';
-  import { printBrief as printBriefPure } from '../lib/print.js';
-  import { pendingFilter } from '../lib/nav.svelte.js';
+  import { onMount } from "svelte";
+  import { state as store, statusTransaksi, terbitkan } from "../lib/store.svelte.js";
+  import { pendingFilter, pendingExpand } from "../lib/nav.svelte.js";
+  import { subtotal, subJenis, rupiah, tgl } from "../lib/format.js";
+  import { cariBentrok } from "../lib/bentrok.js";
+  import { openDrawer } from "../lib/ui.svelte.js";
 
-  let {
-    transaksi,
-    settings,
-    onBukaWalkin,
-    onBukaBrief,
-    onStatus,
-    onTerbitkan,
-    onMuatBrief,
-  } = $props();
+  let search = $state("");
+  let status = $state("semua");
+  let sort = $state("newest");
+  let expanded = $state({});
+  let busyId = $state(null);
 
-  // --- UI state (per-view) ---
-  let openTransaksiId = $state(null);
-  let brief = $state(null);
-  let txSearch = $state('');
-  let txStatusFilter = $state('semua');
-  let txSortKey = $state(null); // null = id desc (default terbaru)
-  let txSortDesc = $state(true);
+  const ALAT = $derived(store.alat);
+  const list = $derived.by(() => {
+    let rows = [...store.transaksi];
+    const q = search.trim().toLowerCase();
+    if (q)
+      rows = rows.filter((t) =>
+        [t.nama_project, t.nama_client, `#${t.id}`].filter(Boolean).join(" ").toLowerCase().includes(q),
+      );
+    if (status === "aktif") rows = rows.filter((t) => t.status === "terjadwal" || t.status === "berjalan");
+    else if (status !== "semua") rows = rows.filter((t) => t.status === status);
+    if (sort === "highest") rows.sort((a, b) => b.total - a.total);
+    else if (sort === "lowest") rows.sort((a, b) => a.total - b.total);
+    else rows.sort((a, b) => b.id - a.id);
+    return rows;
+  });
 
-  // A cross-view or same-view jump carries its filter here (ticket 09). Applied
-  // as an effect so both cases work: the mounted view reacts when nav sets it on
-  // a same-view jump, and a fresh mount picks up whatever was left for it.
-  $effect(() => {
-    if (pendingFilter.transaksi != null) {
-      txSearch = '';
-      txStatusFilter = pendingFilter.transaksi;
+  // Terima titipan filter + expand dari Ringkasan (kartu + item perhatian).
+  onMount(() => {
+    if (pendingFilter.transaksi) {
+      search = "";
+      status = pendingFilter.transaksi === "semua" ? "semua" : pendingFilter.transaksi;
       pendingFilter.transaksi = null;
+    }
+    if (pendingExpand.transaksi != null) {
+      expanded = { ...expanded, [pendingExpand.transaksi]: true };
+      pendingExpand.transaksi = null;
     }
   });
 
-  const TX_STATUSES = ['terjadwal', 'berjalan', 'selesai', 'batal'];
+  const badge = (s) =>
+    ({
+      terjadwal: "bg-amber-100 text-amber-900 border-amber-200",
+      berjalan: "bg-orange-100 text-[#C2410C] border-orange-200",
+      selesai: "bg-emerald-100 text-emerald-800 border-emerald-200",
+      batal: "bg-stone-200 text-stone-700 border-stone-300",
+    })[s] ?? "bg-stone-100 text-stone-700 border-stone-200";
 
-  // Sort: satu kolom client-side (Q24) — Total; klik cycle desc→asc→terbaru.
-  const txFiltered = $derived(
-    (() => {
-      const q = txSearch.trim().toLowerCase();
-      let rows = transaksi.filter((t) => {
-        const okStatus = txStatusFilter === 'semua' || t.status === txStatusFilter;
-        const hay = [t.nama_project, t.nama_client, t.lokasi, t.perusahaan_client].filter(Boolean).join(' ').toLowerCase();
-        return okStatus && (!q || hay.includes(q));
-      });
-      if (txSortKey) {
-        const dir = txSortDesc ? -1 : 1;
-        rows = [...rows].sort((a, b) => (a[txSortKey] - b[txSortKey]) * dir);
-      }
-      return rows;
-    })(),
-  );
+  const bentrokUntuk = (t) => {
+    const out = [];
+    for (const b of t.baris ?? []) {
+      if (b.jenis !== "alat" || !b.alat_id) continue;
+      for (const l of cariBentrok(store.transaksi, t.id, b.alat_id, t.tanggal_mulai, t.tanggal_selesai))
+        out.push({ alat: ALAT.find((a) => a.id === b.alat_id)?.nama ?? b.nama, l });
+    }
+    return out;
+  };
 
-  // Baris dikelompokkan per kategori + subtotal, plek dokumen (Q32).
-  const txGrup = (t) => grupBaris(t.baris);
-  function txUrutkan(key) {
-    urutkan(() => [txSortKey, txSortDesc], (k, d) => { txSortKey = k; txSortDesc = d; }, key);
-  }
-
-  // Expand seragam (Q25): single-open per view; lapis-dua Brief ikut ketutup.
-  async function bukaTransaksi(t) {
-    openTransaksiId = openTransaksiId === t.id ? null : t.id;
-    brief = null;
-    if (openTransaksiId) {
-      brief = await onMuatBrief(t.id);
+  async function gantiStatus(t, s) {
+    busyId = t.id;
+    try {
+      await statusTransaksi(t, s);
+    } finally {
+      busyId = null;
     }
   }
 
-  // "Cetak brief" only makes sense once the row (and its brief) is expanded.
-  const printBrief = (t) => printBriefPure(t, brief, settings);
-
-  // Called by the shell when the shared Brief Panel saves, so the row's copy
-  // of the brief stays in sync without a refetch.
-  export function setBrief(next) {
-    brief = next;
+  async function terbitkanInv(t) {
+    busyId = t.id;
+    try {
+      await terbitkan(t);
+    } finally {
+      busyId = null;
+    }
   }
 </script>
 
-{#snippet txRow(t)}
-  <tr class="border-b border-rw-border-gray/40 align-top scroll-mt-24 {openTransaksiId === t.id ? 'bg-rw-darker' : ''}">
-    <td class="px-3 py-2 max-md:py-3">
-      <p class="text-body font-normal">{t.nama_project}</p>
-      {#if t.lokasi}<p class="text-caption text-rw-light-gray">{t.lokasi}</p>{/if}
-    </td>
-    <td class="px-3 py-2 max-md:py-3">
-      {t.nama_client}
-      {#if t.perusahaan_client}<p class="text-caption text-rw-light-gray">{t.perusahaan_client}</p>{/if}
-    </td>
-    <td class="px-3 py-2 whitespace-nowrap max-md:py-3">{t.tanggal_mulai ? `${tgl(t.tanggal_mulai)}${t.tanggal_selesai && t.tanggal_selesai !== t.tanggal_mulai ? ` – ${tgl(t.tanggal_selesai)}` : ''}` : '—'}</td>
-    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3">{rupiah(t.total)}</td>
-    <td class="px-3 py-2 max-md:py-3"><span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(t.status)}">{t.status}</span></td>
-    <td class="px-3 py-2 max-md:py-3">
-      <div class="flex flex-wrap items-center justify-end gap-3">
-        {#if t.status === 'terjadwal'}
-          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onStatus(t, 'berjalan')}>Mulai</button>
-        {:else if t.status === 'berjalan'}
-          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onStatus(t, 'selesai')}>Selesai</button>
-        {:else if t.status === 'selesai' && !t.invoice_terbit}
-          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onTerbitkan(t, bukaTransaksi)}>Terbitkan</button>
-        {/if}
-        <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bukaTransaksi(t)}>{openTransaksiId === t.id ? 'Tutup' : 'Rincian'}</button>
-      </div>
-    </td>
-  </tr>
-  {#if openTransaksiId === t.id}
-  <tr class="bg-rw-darker"><td colspan="6" class="px-3 py-4">
-    <div class="grid gap-2">
-      {#each txGrup(t) as g (g.kategori)}
-        <p class="text-caption uppercase text-rw-light-gray">{g.kategori}: subtotal {rupiah(g.subtotal)}</p>
-        <ul class="grid gap-1 text-body-sm">
-          {#each g.baris as b (b.id)}
-            <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-rw-light-gray">[{b.jenis}]</span></span><span class="tabular-nums">{rupiah(b.qty * b.harga_satuan)}</span></li>
+<section id="view-transaksi" class="view-panel space-y-4" aria-label="Transaksi sewa">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+    <div class="relative flex-1 max-w-md w-full">
+      <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-stone-400" aria-hidden="true">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+      </span>
+      <input type="text" bind:value={search} placeholder="Cari nama proyek, klien, atau ID transaksi..." aria-label="Cari transaksi" class="w-full text-xs pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C2410C]/20 focus:border-[#C2410C] focus:bg-white transition-all" />
+    </div>
+
+    <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+      <select bind:value={status} aria-label="Filter status transaksi" class="flex-1 sm:flex-none text-xs p-2 border border-stone-300 rounded-lg focus:border-[#C2410C] bg-white min-w-[120px]">
+        <option value="semua">Semua Status</option>
+        <option value="aktif">Aktif</option>
+        <option value="terjadwal">Terjadwal</option>
+        <option value="berjalan">Berjalan</option>
+        <option value="selesai">Selesai</option>
+        <option value="batal">Batal</option>
+      </select>
+
+      <select bind:value={sort} aria-label="Urut transaksi" class="flex-1 sm:flex-none text-xs p-2 border border-stone-300 rounded-lg focus:border-[#C2410C] bg-white min-w-[120px]">
+        <option value="newest">Terbaru</option>
+        <option value="highest">Total Tertinggi</option>
+        <option value="lowest">Total Terendah</option>
+      </select>
+
+      <button type="button" onclick={() => openDrawer("walkin")} class="w-full sm:w-auto text-center px-4 py-2 text-xs font-semibold text-white bg-[#C2410C] hover:bg-[#9A3412] rounded-lg shadow-sm transition-colors whitespace-nowrap">+ Walk-in Job</button>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[720px] text-left text-xs">
+        <thead class="bg-stone-50 border-b border-stone-200 text-stone-600">
+          <tr>
+            <th class="py-3 px-3 w-8"><span class="sr-only">Rincian</span></th>
+            <th class="py-3 px-3 font-semibold">Proyek & Klien</th>
+            <th class="py-3 px-3 font-semibold">Jadwal Sewa & Lokasi</th>
+            <th class="py-3 px-3 font-semibold">Total Nilai</th>
+            <th class="py-3 px-3 font-semibold">Lifecycle Status</th>
+            <th class="py-3 px-3 font-semibold text-right">Aksi Operasional</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each list as t (t.id)}
+            {@const bentrok = bentrokUntuk(t)}
+            {@const sj = subJenis(t.baris)}
+            <tr class="border-b border-stone-200 hover:bg-stone-50/50 transition-colors">
+              <td class="py-3 px-3 text-center">
+                <button
+                  type="button"
+                  onclick={() => (expanded = { ...expanded, [t.id]: !expanded[t.id] })}
+                  aria-label="Lihat rincian komponen sewa untuk {t.nama_project}"
+                  aria-expanded={!!expanded[t.id]}
+                  class="text-stone-500 hover:text-stone-900 p-1.5 rounded hover:bg-stone-200"
+                >
+                  <svg class="w-4 h-4 transform transition-transform {expanded[t.id] ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                </button>
+              </td>
+              <td class="py-3 px-3">
+                <div class="font-mono text-xs text-stone-500">#{t.id}</div>
+                <div class="text-sm font-semibold text-stone-900">{t.nama_project}</div>
+                <div class="text-xs text-stone-600">{t.nama_client}</div>
+                {#if bentrok.length}
+                  <span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                    <svg class="w-3.5 h-3.5 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    Bentrok Jadwal
+                  </span>
+                {/if}
+              </td>
+              <td class="py-3 px-3 text-xs text-stone-700">
+                <div>{t.tanggal_mulai ? `${tgl(t.tanggal_mulai)} s/d ${tgl(t.tanggal_selesai)}` : "-"}</div>
+                {#if t.lokasi}<div class="text-[11px] text-stone-500 mt-0.5">{t.lokasi}</div>{/if}
+              </td>
+              <td class="py-3 px-3 font-mono tabular-nums text-xs font-semibold text-stone-900">{rupiah(t.total)}</td>
+              <td class="py-3 px-3">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border {badge(t.status)}">{t.status}</span>
+                  <select
+                    value={t.status}
+                    disabled={busyId === t.id}
+                    onchange={(e) => gantiStatus(t, e.target.value)}
+                    aria-label="Ubah status transaksi #{t.id}"
+                    class="text-xs bg-white border border-stone-300 rounded px-1.5 py-0.5 focus:border-[#C2410C]"
+                  >
+                    <option value="terjadwal">Terjadwal</option>
+                    <option value="berjalan">Berjalan</option>
+                    <option value="selesai">Selesai</option>
+                    <option value="batal">Batal</option>
+                  </select>
+                </div>
+              </td>
+              <td class="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
+                {#if t.invoice_terbit}
+                  <span class="inline-flex items-center gap-1 text-xs text-stone-600 bg-stone-100 px-2 py-1 rounded border border-stone-300" title="Invoice sudah terbit">
+                    <svg class="w-3.5 h-3.5 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    Terkunci
+                  </span>
+                {:else}
+                  <button type="button" disabled={busyId === t.id} onclick={() => terbitkanInv(t)} class="text-xs font-semibold text-white bg-[#C2410C] hover:bg-[#9A3412] px-2.5 py-1.5 rounded transition-colors disabled:opacity-50">Terbitkan Invoice</button>
+                {/if}
+                <button type="button" onclick={() => openDrawer("brief", t)} class="text-xs font-semibold text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-2.5 py-1.5 rounded border border-stone-300 transition-colors">Brief</button>
+              </td>
+            </tr>
+            {#if expanded[t.id]}
+              <tr class="bg-stone-50 border-b border-stone-200">
+                <td colspan="6" class="p-3 sm:p-4 pl-4 sm:pl-12">
+                  <div class="space-y-3">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-200 pb-2">
+                      <h5 class="text-xs font-bold uppercase tracking-wider text-stone-600">Rincian Komponen Sewa</h5>
+                      <div class="flex flex-wrap gap-2 sm:gap-4 text-xs font-medium text-stone-700">
+                        <span>Subtotal Alat: <strong class="font-mono text-stone-900">{rupiah(sj.Alat)}</strong></span>
+                        <span>Subtotal Jasa: <strong class="font-mono text-stone-900">{rupiah(sj.Jasa)}</strong></span>
+                        <span>Subtotal Biaya: <strong class="font-mono text-stone-900">{rupiah(sj.Biaya)}</strong></span>
+                      </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                      <table class="w-full min-w-[500px] text-xs">
+                        <thead>
+                          <tr class="text-stone-500 text-left border-b border-stone-200">
+                            <th class="py-1">Kategori</th>
+                            <th class="py-1">Nama Item</th>
+                            <th class="py-1 text-center">Qty / Satuan</th>
+                            <th class="py-1 text-right">Tarif Satuan</th>
+                            <th class="py-1 text-right">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-stone-100">
+                          {#each t.baris as b (b.id)}
+                            <tr>
+                              <td class="py-1.5 font-semibold text-stone-600">{b.jenis}</td>
+                              <td class="py-1.5 text-stone-800">{b.nama}</td>
+                              <td class="py-1.5 text-center font-mono">{b.qty} {b.satuan}</td>
+                              <td class="py-1.5 text-right font-mono">{rupiah(b.harga_satuan)}</td>
+                              <td class="py-1.5 text-right font-mono font-semibold text-stone-900">{rupiah(Number(b.qty) * Number(b.harga_satuan))}</td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                    {#if !t.baris?.length}<p class="text-xs text-stone-500 italic">Tanpa baris.</p>{/if}
+                    <p class="text-xs text-stone-600">Subtotal {rupiah(subtotal(t.baris))}{t.diskon ? ` · Diskon -{rupiah(t.diskon)}` : ""} · Total {rupiah(t.total)}</p>
+                  </div>
+                </td>
+              </tr>
+            {/if}
           {/each}
-        </ul>
-      {/each}
-      {#if !txGrup(t).length}<p class="text-body-sm text-rw-light-gray">Tanpa baris.</p>{/if}
+        </tbody>
+      </table>
     </div>
-    <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
-      <button class="underline" onclick={() => onBukaBrief(t)} data-brief-toggle>Brief</button>
-      <button class="underline" onclick={() => printBrief(t)}>Cetak brief</button>
-      {#if !t.invoice_terbit && t.status !== 'selesai' && t.status !== 'batal'}<button class="underline" onclick={() => onTerbitkan(t, bukaTransaksi)}>Terbitkan invoice</button>{/if}
-      {#if t.status !== 'batal' && t.status !== 'selesai'}<button class="underline" onclick={() => onStatus(t, 'batal')}>Batal</button>{/if}
-    </div>
-  </td></tr>
-  {/if}
-{/snippet}
 
-<section class="mt-8" data-view="transaksi">
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <h2 class="text-subheading font-normal">Transaksi</h2>
-    <button class="rounded-rw-control bg-rw-accent px-5 py-2.5 text-body-sm text-rw-white max-md:py-3" onclick={onBukaWalkin} data-walkin-toggle>
-      + Walk-in
-    </button>
+    {#if !list.length}
+      <div class="py-12 text-center text-stone-500">
+        <p class="text-sm font-semibold text-stone-700">Tidak ada transaksi yang cocok.</p>
+        <p class="text-xs mt-1">Coba sesuaikan kata kunci pencarian atau ubah filter status.</p>
+      </div>
+    {/if}
   </div>
-
-  {#if !transaksi.length}
-    <p class="mt-4 text-body-sm text-rw-light-gray">Belum ada transaksi. Mulai lewat tombol “+ Walk-in” di atas.</p>
-  {:else}
-  <div class="mt-4 flex flex-wrap gap-3">
-    <input class="min-w-40 flex-1 rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm placeholder:text-rw-light-gray max-md:py-3" placeholder="Cari project / client / lokasi" bind:value={txSearch} data-tx-search />
-    <select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm max-md:py-3" bind:value={txStatusFilter} data-tx-status>
-      <option value="semua">semua status</option>
-      {#each TX_STATUSES as s (s)}<option value={s}>{s}</option>{/each}
-    </select>
-  </div>
-
-  {#if !txFiltered.length}
-    <p class="mt-4 text-body-sm text-rw-light-gray">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { txSearch = ''; txStatusFilter = 'semua'; }}>Reset</button></p>
-  {:else}
-  <!-- Rail table (ticket 04): dense on desktop, comfortable to tap on mobile.
-       The overflow wrapper is the scroll container, so the thead sticks only
-       from md up (mobile keeps its short header scrolling with the body). -->
-  <div class="mt-4 overflow-x-auto rounded-rw-card border border-rw-border-gray/40">
-    <table class="w-full min-w-[640px] border-collapse text-body-sm">
-      <thead class="bg-rw-charcoal md:sticky md:top-0">
-        <tr class="border-b border-rw-border-gray/40 text-left text-rw-light-gray">
-          <th class="px-3 py-2 font-normal">Project</th>
-          <th class="px-3 py-2 font-normal">Client</th>
-          <th class="px-3 py-2 font-normal">Tgl event</th>
-          <th class="px-3 py-2 text-right font-normal"><button class="underline {txSortKey === 'total' ? 'font-medium' : ''}" onclick={() => txUrutkan('total')}>Total {txSortKey === 'total' ? (txSortDesc ? '↓' : '↑') : ''}</button></th>
-          <th class="px-3 py-2 font-normal">Status</th>
-          <th class="px-3 py-2 text-right font-normal">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each txFiltered as t (t.id)}
-          {@render txRow(t)}
-        {/each}
-      </tbody>
-    </table>
-  </div>
-  {/if}
-  {/if}
 </section>

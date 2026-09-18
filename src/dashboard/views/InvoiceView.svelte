@@ -1,202 +1,275 @@
+<!-- View Invoice Ember: comot struktur index.html.
+     Mapping backend: nomor/total/dibayar/sisa/jatuh_tempo/status/overdue
+     dari API; nama klien join dari transaksi induk (API list tak bawa nama).
+     Expand = riwayat bayar (label server) + koreksi (jumlah minus) + tombol
+     Bayar/Tempo/Koreksi/Cetak/Batal. Void pakai confirm seperti prototipe. -->
 <script>
-  // InvoiceView (spec: ticket 09). Extracted from DashboardApp.svelte's
-  // `{#if view === 'invoice'}` block plus its `invRow` row snippet, moved as a
-  // unit. Markup unchanged byte-for-byte.
-  //
-  // Owns its UI state (search/filter/sort, expanded row, the loaded detail).
-  // Data + mutations come from the store; the payment/tempo forms open in the
-  // shell's shared Panel, so those are passed in as callbacks. `skeleton` is the
-  // shell's shared loading placeholder.
-  import { rupiah, tgl, urutkan, rwChip } from '../lib/format.js';
-  import { pendingFilter } from '../lib/nav.svelte.js';
+  import { onMount } from "svelte";
+  import { state as store, muatInvoice, voidInvoice } from "../lib/store.svelte.js";
+  import { pendingFilter, pendingExpand } from "../lib/nav.svelte.js";
+  import { rupiah, tgl, isOverdue } from "../lib/format.js";
+  import { lembarInvoice } from "../lib/print-ember.js";
+  import { openDrawer, showPrint } from "../lib/ui.svelte.js";
 
-  let {
-    invoices,
-    transaksi,
-    skeleton,
-    detailEpoch,
-    onBayarCepat,
-    onBukaTempo,
-    onPrint,
-    onVoid,
-    onMuatDetail,
-  } = $props();
+  let search = $state("");
+  let status = $state("semua");
+  let sort = $state("newest");
+  let expanded = $state({});
+  let detail = $state({});
+  let busyId = $state(null);
 
-  // --- UI state (per-view) ---
-  let openInvoiceId = $state(null);
-  let invDetail = $state(null);
-  let invSearch = $state('');
-  let invStatusFilter = $state('semua');
-  let invSortKey = $state(null); // null = id desc (default terbaru)
-  let invSortDesc = $state(true);
+  const clientOf = (i) =>
+    store.transaksi.find((t) => t.id === i.transaksi_id)?.nama_client ?? "-";
 
-  const INV_STATUSES = ['unpaid', 'partial', 'paid', 'batal'];
+  const list = $derived.by(() => {
+    let rows = [...store.invoices];
+    const q = search.trim().toLowerCase();
+    if (q)
+      rows = rows.filter((i) =>
+        [i.nomor, clientOf(i)].filter(Boolean).join(" ").toLowerCase().includes(q),
+      );
+    if (status === "overdue") rows = rows.filter((i) => i.overdue);
+    else if (status === "paid" || status === "partial") rows = rows.filter((i) => i.status === status);
+    else if (status === "unpaid") rows = rows.filter((i) => i.status === "unpaid" || i.status === "partial");
+    else if (status !== "semua") rows = rows.filter((i) => i.status === status);
+    if (sort === "highest") rows.sort((a, b) => b.total - a.total);
+    else if (sort === "lowest") rows.sort((a, b) => a.total - b.total);
+    else rows.sort((a, b) => b.id - a.id);
+    return rows;
+  });
 
-  // A cross-view jump carries its filter here (ticket 09); see TransaksiView.
-  $effect(() => {
-    if (pendingFilter.invoice != null) {
-      invSearch = '';
-      invStatusFilter = pendingFilter.invoice;
+  // Titipan Ringkasan: filter + buka barisnya (perhatian overdue).
+  onMount(() => {
+    if (pendingFilter.invoice) {
+      search = "";
+      status = pendingFilter.invoice === "all" ? "semua" : pendingFilter.invoice;
       pendingFilter.invoice = null;
     }
-  });
-
-  // Client join sisi-FE (Q24): invoice tak bawa nama_client → tarik dari
-  // transaksi induknya. Search: nomor + client. Overdue = opsi status ekstra.
-  const invClient = (i) => transaksi.find((t) => t.id === i.transaksi_id)?.nama_client ?? '';
-  const invFiltered = $derived(
-    (() => {
-      const q = invSearch.trim().toLowerCase();
-      let rows = invoices.filter((i) => {
-        const okStatus =
-          invStatusFilter === 'semua' ||
-          (invStatusFilter === 'overdue' ? i.overdue : i.status === invStatusFilter);
-        const hay = [i.nomor, invClient(i)].filter(Boolean).join(' ').toLowerCase();
-        return okStatus && (!q || hay.includes(q));
-      });
-      if (invSortKey) {
-        const dir = invSortDesc ? -1 : 1;
-        rows = [...rows].sort((a, b) => (a[invSortKey] > b[invSortKey] ? 1 : a[invSortKey] < b[invSortKey] ? -1 : 0) * dir);
-      }
-      return rows;
-    })(),
-  );
-
-  // Sort satu kolom client-side (Q24) — Total / Tempo; klik cycle desc→asc→terbaru.
-  function invUrutkan(key) {
-    urutkan(() => [invSortKey, invSortDesc], (k, d) => { invSortKey = k; invSortDesc = d; }, key);
-  }
-
-  // Expand seragam (Q25): single-open; isi ulang detail saat buka.
-  async function bukaInvoice(i) {
-    openInvoiceId = openInvoiceId === i.id ? null : i.id;
-    invDetail = null;
-    if (openInvoiceId) {
-      invDetail = await onMuatDetail(i.id);
-    }
-  }
-
-  // Re-fetch the open detail after the Panel mutates an invoice (ticket 09):
-  // the list refreshes via load(), but the expanded detail is fetched here.
-  $effect(() => {
-    const _epoch = detailEpoch;
-    if (openInvoiceId != null) {
-      onMuatDetail(openInvoiceId).then((d) => {
-        if (d) invDetail = d;
-      });
+    if (pendingExpand.invoice != null) {
+      toggleExpand(pendingExpand.invoice);
+      pendingExpand.invoice = null;
     }
   });
 
-  // Called by the shell when the shared Panel mutates an invoice.
-  export function setDetail(next) {
-    invDetail = next;
+  const badge = (s) =>
+    ({
+      unpaid: "bg-red-100 text-red-800 border-red-200",
+      partial: "bg-amber-100 text-amber-800 border-amber-200",
+      paid: "bg-emerald-100 text-emerald-800 border-emerald-200",
+      batal: "bg-stone-200 text-stone-700 border-stone-300",
+    })[s] ?? "bg-stone-100 text-stone-700 border-stone-200";
+
+  async function toggleExpand(id) {
+    expanded = { ...expanded, [id]: !expanded[id] };
+    if (expanded[id] && !detail[id]) {
+      detail = { ...detail, [id]: await muatInvoice(id) };
+    }
   }
+
+  async function batal(i) {
+    if (!confirm(`Apakah Anda yakin ingin membatalkan (void) Invoice ${i.nomor}? Catatan riwayat pembayaran masa lalu akan tetap disimpan.`)) return;
+    busyId = i.id;
+    try {
+      await voidInvoice(i);
+    } finally {
+      busyId = null;
+    }
+  }
+
+  function cetakInv(i) {
+    const d = detail[i.id];
+    if (d) showPrint("Cetak Dokumen Invoice", lembarInvoice(d, store.settings));
+  }
+
+  const koreksi = (d) => (d?.bayar ?? []).filter((p) => Number(p.jumlah) < 0);
+  const bayarMasuk = (d) => (d?.bayar ?? []).filter((p) => Number(p.jumlah) >= 0);
 </script>
 
-{#snippet invRow(i)}
-  <tr class="border-b border-rw-border-gray/40 align-top scroll-mt-24 {openInvoiceId === i.id ? 'bg-rw-darker' : ''}">
-    <td class="px-3 py-2 whitespace-nowrap max-md:py-3">{i.nomor}</td>
-    <td class="px-3 py-2 max-md:py-3"><p class="text-body font-normal">{invClient(i) || '-'}</p></td>
-    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3">{rupiah(i.total)}</td>
-    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3">{rupiah(i.dibayar)}</td>
-    <!-- Sisa bold saat overdue (Q17) biar yang ditagih paling menonjol. -->
-    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3 {i.overdue ? 'font-medium text-rw-danger-text' : ''}">{rupiah(i.sisa)}</td>
-    <td class="px-3 py-2 whitespace-nowrap max-md:py-3">{tgl(i.jatuh_tempo)}</td>
-    <td class="px-3 py-2 max-md:py-3"><span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(i.status, i.overdue)}">{i.status}{i.overdue ? ' · overdue' : ''}</span></td>
-    <td class="px-3 py-2 max-md:py-3">
-      <div class="flex flex-wrap items-center justify-end gap-3">
-        {#if i.status !== 'paid' && i.status !== 'batal'}
-          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onBayarCepat(i)} data-inv-bayar>Bayar</button>
-        {/if}
-        <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => bukaInvoice(i)}>{openInvoiceId === i.id ? 'Tutup' : 'Rincian'}</button>
-      </div>
-    </td>
-  </tr>
-  {#if openInvoiceId === i.id}
-  <tr class="bg-rw-darker"><td colspan="8" class="px-3 py-4">
-    {#if invDetail}
-      <!-- Riwayat bayar ringan (ticket 06): read-only, tetap terlihat. Label
-           DP/Cicilan/Pelunasan datang dari server (derived), tampil apa adanya.
-           Form bayar + ubah tempo pindah ke Panel (tombol di bawah). -->
-      <div class="flex flex-wrap items-baseline justify-between gap-2">
-        <p class="text-caption uppercase text-rw-light-gray">Riwayat pembayaran</p>
-        <p class="text-body-sm text-rw-light-gray">dibayar {rupiah(i.dibayar)} · sisa {rupiah(i.sisa)}</p>
-      </div>
-      {#if invDetail.bayar.length}
-        <ul class="mt-2 grid gap-1 text-body-sm">
-          {#each invDetail.bayar as p (p.id)}
-            <li class="flex justify-between gap-2"><span>{tgl(p.tanggal)} ({p.label}) · {p.metode}</span><span class="tabular-nums">{rupiah(p.jumlah)}</span></li>
+<section id="view-invoice" class="view-panel space-y-4" aria-label="Invoice dan penagihan">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+    <div class="relative flex-1 max-w-md w-full">
+      <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-stone-400" aria-hidden="true">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+      </span>
+      <input type="text" bind:value={search} placeholder="Cari nomor invoice, klien, proyek..." aria-label="Cari invoice" class="w-full text-xs pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C2410C]/20 focus:border-[#C2410C] focus:bg-white transition-all" />
+    </div>
+
+    <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+      <select bind:value={status} aria-label="Filter status invoice" class="flex-1 sm:flex-none text-xs p-2 border border-stone-300 rounded-lg focus:border-[#C2410C] bg-white min-w-[130px]">
+        <option value="semua">Semua Status</option>
+        <option value="unpaid">Belum Lunas</option>
+        <option value="partial">Sebagian (DP)</option>
+        <option value="paid">Lunas</option>
+        <option value="overdue">Overdue</option>
+        <option value="batal">Batal (Void)</option>
+      </select>
+
+      <select bind:value={sort} aria-label="Urut invoice" class="flex-1 sm:flex-none text-xs p-2 border border-stone-300 rounded-lg focus:border-[#C2410C] bg-white min-w-[120px]">
+        <option value="newest">Terbaru</option>
+        <option value="highest">Total Tertinggi</option>
+        <option value="lowest">Total Terendah</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[780px] text-left text-xs">
+        <thead class="bg-stone-50 border-b border-stone-200 text-stone-600">
+          <tr>
+            <th class="py-3 px-3 w-8"><span class="sr-only">Rincian</span></th>
+            <th class="py-3 px-3 font-semibold">Nomor & Klien</th>
+            <th class="py-3 px-3 font-semibold">Total Tagihan</th>
+            <th class="py-3 px-3 font-semibold">Terbayar</th>
+            <th class="py-3 px-3 font-semibold">Sisa Tagihan</th>
+            <th class="py-3 px-3 font-semibold">Jatuh Tempo</th>
+            <th class="py-3 px-3 font-semibold">Status</th>
+            <th class="py-3 px-3 font-semibold text-right">Aksi Kas & Cetak</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each list as i (i.id)}
+            {@const d = detail[i.id]}
+            <tr class="border-b border-stone-200 hover:bg-stone-50/50 transition-colors">
+              <td class="py-3 px-3 text-center">
+                <button
+                  type="button"
+                  onclick={() => toggleExpand(i.id)}
+                  aria-label="Lihat riwayat pembayaran invoice {i.nomor}"
+                  aria-expanded={!!expanded[i.id]}
+                  class="text-stone-500 hover:text-stone-900 p-1.5 rounded hover:bg-stone-200"
+                >
+                  <svg class="w-4 h-4 transform transition-transform {expanded[i.id] ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                </button>
+              </td>
+              <td class="py-3 px-3">
+                <div class="font-mono text-xs text-stone-600">{i.nomor}</div>
+                <div class="text-sm font-semibold text-stone-900">{clientOf(i)}</div>
+              </td>
+              <td class="py-3 px-3 font-mono tabular-nums text-xs font-semibold text-stone-900">{rupiah(i.total)}</td>
+              <td class="py-3 px-3 font-mono tabular-nums text-xs text-emerald-700 font-semibold">{rupiah(i.dibayar)}</td>
+              <td class="py-3 px-3 font-mono tabular-nums text-xs {i.sisa > 0 ? 'text-red-700 font-bold' : 'text-stone-500'}">{rupiah(i.sisa)}</td>
+              <td class="py-3 px-3 text-xs text-stone-700">
+                <div>{tgl(i.jatuh_tempo)}</div>
+                {#if i.overdue && i.status !== "batal"}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">Overdue</span>
+                {/if}
+              </td>
+              <td class="py-3 px-3">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border {badge(i.status)}">{i.status}</span>
+              </td>
+              <td class="py-3 px-3 text-right space-x-1 whitespace-nowrap">
+                {#if i.status !== "paid" && i.status !== "batal"}
+                  <button type="button" onclick={() => openDrawer("pay", i)} class="text-xs font-semibold text-white bg-[#C2410C] hover:bg-[#9A3412] px-2.5 py-1.5 rounded transition-colors">Bayar Cepat</button>
+                {/if}
+                <button type="button" onclick={() => toggleExpand(i.id).then(() => cetakInv(i))} class="text-xs font-semibold text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-2 py-1.5 rounded border border-stone-300 transition-colors">Cetak</button>
+                {#if i.status !== "batal"}
+                  <button type="button" onclick={() => openDrawer("tempo", i)} class="text-xs text-stone-600 hover:text-stone-900 px-2 py-1.5 rounded hover:bg-stone-100" title="Ubah Jatuh Tempo">Tempo</button>
+                {/if}
+                {#if i.status !== "batal"}
+                  <button type="button" disabled={busyId === i.id} onclick={() => batal(i)} class="text-xs text-red-700 hover:text-red-800 hover:bg-red-50 px-2 py-1.5 rounded disabled:opacity-50">Batal</button>
+                {/if}
+              </td>
+            </tr>
+            {#if expanded[i.id]}
+              <tr class="bg-stone-50 border-b border-stone-200">
+                <td colspan="8" class="p-3 sm:p-4 pl-4 sm:pl-12 space-y-4">
+                  {#if !d}
+                    <p class="text-xs text-stone-500">Memuat rincian...</p>
+                  {:else}
+                    <div>
+                      <div class="flex items-center justify-between border-b border-stone-200 pb-1.5 mb-2">
+                        <h5 class="text-xs font-bold uppercase tracking-wider text-stone-700">Riwayat Pembayaran Diterima</h5>
+                        <span class="text-xs text-stone-500 font-mono">Total Terbayar: {rupiah(i.dibayar)}</span>
+                      </div>
+                      {#if bayarMasuk(d).length}
+                        <div class="overflow-x-auto">
+                          <table class="w-full min-w-[500px] text-xs">
+                            <thead>
+                              <tr class="text-stone-500 text-left border-b border-stone-200">
+                                <th class="py-1">Tanggal</th>
+                                <th class="py-1">Label Tagihan</th>
+                                <th class="py-1">Metode</th>
+                                <th class="py-1">Catatan</th>
+                                <th class="py-1 text-right">Nominal</th>
+                              </tr>
+                            </thead>
+                            <tbody class="divide-y divide-stone-100">
+                              {#each bayarMasuk(d) as p (p.id)}
+                                <tr>
+                                  <td class="py-1.5 font-mono text-stone-600">{tgl(p.tanggal)}</td>
+                                  <td class="py-1.5 font-semibold text-stone-800">{p.label}</td>
+                                  <td class="py-1.5 text-stone-600">{p.metode}</td>
+                                  <td class="py-1.5 text-stone-500">{p.referensi || "-"}</td>
+                                  <td class="py-1.5 text-right font-mono font-bold text-emerald-700">{rupiah(p.jumlah)}</td>
+                                </tr>
+                              {/each}
+                            </tbody>
+                          </table>
+                        </div>
+                      {:else}
+                        <p class="text-xs text-stone-500 italic py-1">Belum ada catatan pembayaran yang masuk.</p>
+                      {/if}
+                    </div>
+
+                    <div>
+                      <div class="flex items-center justify-between border-b border-stone-200 pb-1.5 mb-2">
+                        <h5 class="text-xs font-bold uppercase tracking-wider text-stone-700">Koreksi & Penyesuaian Nilai (Baris Minus)</h5>
+                        {#if i.status !== "batal"}
+                          <button type="button" onclick={() => openDrawer("correction", i)} class="text-xs text-[#C2410C] hover:underline font-semibold">+ Tambah Baris Koreksi</button>
+                        {/if}
+                      </div>
+                      {#if koreksi(d).length}
+                        <div class="overflow-x-auto">
+                          <table class="w-full min-w-[450px] text-xs">
+                            <thead>
+                              <tr class="text-stone-500 text-left border-b border-stone-200">
+                                <th class="py-1">Tanggal</th>
+                                <th class="py-1">Keterangan Koreksi</th>
+                                <th class="py-1 text-right">Nominal Penyesuaian</th>
+                              </tr>
+                            </thead>
+                            <tbody class="divide-y divide-stone-100">
+                              {#each koreksi(d) as p (p.id)}
+                                <tr>
+                                  <td class="py-1.5 font-mono text-stone-600">{tgl(p.tanggal)}</td>
+                                  <td class="py-1.5 text-stone-800">{p.referensi || p.label}</td>
+                                  <td class="py-1.5 text-right font-mono font-bold text-red-700">{rupiah(p.jumlah)}</td>
+                                </tr>
+                              {/each}
+                            </tbody>
+                          </table>
+                        </div>
+                      {:else}
+                        <p class="text-xs text-stone-500 italic py-1">Tidak ada baris koreksi minus pada invoice ini.</p>
+                      {/if}
+                    </div>
+
+                    <div>
+                      <h5 class="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">Rincian Baris Terkunci dari Transaksi</h5>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded border border-stone-200">
+                        {#each d.baris as b (b.nama)}
+                          <div class="flex justify-between py-0.5 border-b border-stone-100">
+                            <span class="text-stone-700">{b.nama} ({b.qty} {b.satuan})</span>
+                            <span class="font-mono font-semibold text-stone-800">{rupiah(Number(b.qty) * Number(b.harga_satuan))}</span>
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </td>
+              </tr>
+            {/if}
           {/each}
-        </ul>
-      {:else}
-        <p class="mt-2 text-body-sm text-rw-light-gray">Belum ada pembayaran.</p>
-      {/if}
+        </tbody>
+      </table>
+    </div>
 
-      {#if i.status === 'batal'}
-        <p class="mt-3 text-body-sm text-rw-light-gray">Invoice dibatalkan, pembayaran & tempo terkunci, riwayat tetap tersimpan.</p>
-      {/if}
-
-      <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
-        {#if i.status !== 'paid' && i.status !== 'batal'}
-          <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onBayarCepat(i)} data-inv-bayar-detail>Catat bayar</button>
-        {/if}
-        {#if i.status !== 'batal'}
-          <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onBukaTempo(i)} data-inv-tempo-toggle>Ubah tempo</button>
-        {/if}
-        <button class="underline max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onPrint(i, invDetail)}>Cetak</button>
-        {#if i.status !== 'paid' && i.status !== 'batal'}
-          <button class="underline text-rw-danger-text max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onVoid(i)}>Batalkan</button>
-        {/if}
+    {#if !list.length}
+      <div class="py-12 text-center text-stone-500">
+        <p class="text-sm font-semibold text-stone-700">Tidak ada faktur invoice yang cocok.</p>
+        <p class="text-xs mt-1">Invoice diterbitkan langsung dari menu Transaksi melalui tombol "Terbitkan Invoice".</p>
       </div>
-    {:else}
-      {@render skeleton(2)}
     {/if}
-  </td></tr>
-  {/if}
-{/snippet}
-
-<section class="mt-8" data-view="invoice">
-  <h2 class="text-subheading font-normal">Invoice</h2>
-  {#if !invoices.length}
-    <!-- Empty state: satu baris + CTA (Q34). -->
-    <p class="mt-4 text-body-sm text-rw-light-gray">Belum ada invoice. Terbitkan dari Transaksi lewat tombol “Terbitkan invoice”.</p>
-  {:else}
-  <div class="mt-4 flex flex-wrap gap-3">
-    <input class="min-w-40 flex-1 rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm placeholder:text-rw-light-gray max-md:py-3" placeholder="Cari nomor / client" bind:value={invSearch} data-inv-search />
-    <select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm max-md:py-3" bind:value={invStatusFilter} data-inv-status>
-      <option value="semua">semua status</option>
-      {#each INV_STATUSES as s (s)}<option value={s}>{s}</option>{/each}
-      <option value="overdue">overdue</option>
-    </select>
   </div>
-
-  {#if !invFiltered.length}
-    <!-- Filter-miss beda dari empty: tawarkan reset (Q34). -->
-    <p class="mt-4 text-body-sm text-rw-light-gray">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { invSearch = ''; invStatusFilter = 'semua'; }}>Reset</button></p>
-  {:else}
-  <!-- Rail table (ticket 06): dense on desktop, comfortable on mobile, money
-       columns right-aligned with tabular-nums. Same pattern as Transaksi/RAB. -->
-  <div class="mt-4 overflow-x-auto rounded-rw-card border border-rw-border-gray/40">
-    <table class="w-full min-w-[720px] border-collapse text-body-sm">
-      <thead class="bg-rw-charcoal md:sticky md:top-0">
-        <tr class="border-b border-rw-border-gray/40 text-left text-rw-light-gray">
-          <th class="px-3 py-2 font-normal">Nomor</th>
-          <th class="px-3 py-2 font-normal">Client</th>
-          <th class="px-3 py-2 text-right font-normal"><button class="underline {invSortKey === 'total' ? 'font-medium' : ''}" onclick={() => invUrutkan('total')}>Total {invSortKey === 'total' ? (invSortDesc ? '↓' : '↑') : ''}</button></th>
-          <th class="px-3 py-2 text-right font-normal">Dibayar</th>
-          <th class="px-3 py-2 text-right font-normal">Sisa</th>
-          <th class="px-3 py-2 font-normal"><button class="underline {invSortKey === 'jatuh_tempo' ? 'font-medium' : ''}" onclick={() => invUrutkan('jatuh_tempo')}>Tempo {invSortKey === 'jatuh_tempo' ? (invSortDesc ? '↓' : '↑') : ''}</button></th>
-          <th class="px-3 py-2 font-normal">Status</th>
-          <th class="px-3 py-2 text-right font-normal">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each invFiltered as i (i.id)}
-          {@render invRow(i)}
-        {/each}
-      </tbody>
-    </table>
-  </div>
-  {/if}
-  {/if}
 </section>

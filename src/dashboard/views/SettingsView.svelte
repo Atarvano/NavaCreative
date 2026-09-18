@@ -1,25 +1,112 @@
+<!-- View Settings Ember: comot struktur index.html.
+     Mapping backend: nama/hp/email/bank/norek/atas_nama (tanpa alamat,
+     karena kolomnya tidak ada di settings). Tanpa tombol reset data
+     (prototipe localStorage-only; di backend reset = hapus database,
+     bukan aksi UI). Logo ikut pola lama: path statis + preview. -->
 <script>
-  // SettingsView (spec: ticket 09). Extracted verbatim from DashboardApp.svelte's
-  // `{#if view === 'settings'}` block; the markup is unchanged byte-for-byte.
-  //
-  // Owns only UI state (the settings form buffer). The settings DATA and the
-  // save action come from the store; `onSimpan` is the shell's adapter so this
-  // view does not import store internals directly.
-  let { setForm, onSimpan } = $props();
+  import { state as store, simpanSettings } from "../lib/store.svelte.js";
+  import { LOGO_URL } from "../lib/print-ember.js";
+
+  let busy = $state(false);
+
+  // Buffer form disalin dari store agar batal = tutup tanpa simpan tidak
+  // perlu ada (satu tombol simpan seperti prototipe).
+  let f = $state({ nama: "", hp: "", email: "", bank: "", norek: "", atas_nama: "" });
+  let seeded = $state(false);
+
+  $effect(() => {
+    if (!seeded && store.settings && Object.keys(store.settings).length) {
+      f = {
+        nama: store.settings.nama ?? "",
+        hp: store.settings.hp ?? "",
+        email: store.settings.email ?? "",
+        bank: store.settings.bank ?? "",
+        norek: store.settings.norek ?? "",
+        atas_nama: store.settings.atas_nama ?? "",
+      };
+      seeded = true;
+    }
+  });
+
+  async function simpan(e) {
+    e.preventDefault();
+    busy = true;
+    try {
+      await simpanSettings({ ...f });
+    } finally {
+      busy = false;
+    }
+  }
 </script>
 
-<section class="mt-8" data-view="settings">
-  <h2 class="text-subheading font-normal">Settings</h2>
-  <p class="mt-2 text-body-sm text-rw-light-gray">Identitas + rekening untuk kop dokumen. Nilai ini mengisi otomatis kop RAB/Brief dan blok DARI/TRANSFER KE di Invoice baru (invoice lama menyimpan snapshot bank-nya sendiri).</p>
-  <!-- Q29: sebut path file logo yang ditunggu kop cetak, ganti logo = taruh file + deploy. -->
-  <div class="mt-4 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4" data-logo-note>
-    <p class="text-caption uppercase text-rw-light-gray">Logo kop cetak</p>
-    <p class="mt-1 text-body-sm">Kop cetak memakai file <code class="rounded-rw-badge bg-rw-ground px-1 font-mono text-body-sm">public/img/logo-red.png</code> (path URL <code class="rounded-rw-badge bg-rw-ground px-1 font-mono text-body-sm">img/logo-red.png</code>). Sampai file itu disuplai, kop memakai teks nama studio. Ganti logo = taruh file lalu deploy.</p>
-  </div>
-  <form class="mt-4 grid gap-4 max-md:grid-cols-1 md:grid-cols-2" onsubmit={onSimpan}>
-    {#each [['nama', 'Nama studio'], ['hp', 'No. HP'], ['email', 'Email'], ['bank', 'Bank'], ['norek', 'No. rekening'], ['atas_nama', 'Atas nama']] as [f, label] (f)}
-      <label class="grid gap-1 text-body-sm">{label}<input class="rounded-rw-control border border-rw-border-gray/40 bg-rw-ground px-3 py-2.5 text-body-sm" bind:value={setForm[f]} /></label>
-    {/each}
-    <button class="rounded-rw-control bg-rw-accent px-6 py-2.5 text-body-sm text-rw-white justify-self-start md:col-span-2 max-md:w-full" type="submit">Simpan settings</button>
+<section id="view-settings" class="view-panel space-y-6" aria-label="Pengaturan studio">
+  <form class="space-y-6" onsubmit={simpan}>
+    <div class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-4">
+      <div class="border-b border-stone-100 pb-2">
+        <h3 class="text-base font-bold font-display text-stone-900">Identitas Studio Multimedia</h3>
+        <p class="text-xs text-stone-500">Informasi ini otomatis mengisi kop pada dokumen RAB, Brief, dan Faktur Invoice.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1" for="set-nama">Nama Studio / Perusahaan *</label>
+          <input id="set-nama" type="text" required bind:value={f.nama} class="w-full text-xs p-2 border border-stone-300 rounded focus:border-[#C2410C]" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1" for="set-hp">Nomor Telepon / WhatsApp Resmi *</label>
+          <input id="set-hp" type="text" required bind:value={f.hp} class="w-full text-xs p-2 border border-stone-300 rounded focus:border-[#C2410C]" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1" for="set-email">Alamat Email Korespondensi *</label>
+          <input id="set-email" type="email" required bind:value={f.email} class="w-full text-xs p-2 border border-stone-300 rounded focus:border-[#C2410C]" />
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-4">
+      <div class="border-b border-stone-100 pb-2">
+        <h3 class="text-base font-bold font-display text-stone-900">Rekening Bank Pembayaran</h3>
+        <p class="text-xs text-stone-500">Nomor rekening tujuan transfer resmi yang dicantumkan pada lembar Invoice cetak.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1" for="set-bank">Nama Bank *</label>
+          <input id="set-bank" type="text" required bind:value={f.bank} class="w-full text-xs p-2 border border-stone-300 rounded focus:border-[#C2410C]" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1" for="set-norek">Nomor Rekening *</label>
+          <input id="set-norek" type="text" required bind:value={f.norek} class="w-full text-xs p-2 border border-stone-300 rounded focus:border-[#C2410C] font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1" for="set-an">Atas Nama Pemilik Rekening *</label>
+          <input id="set-an" type="text" required bind:value={f.atas_nama} class="w-full text-xs p-2 border border-stone-300 rounded focus:border-[#C2410C]" />
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-4">
+      <div class="border-b border-stone-100 pb-2">
+        <h3 class="text-base font-bold font-display text-stone-900">Logo Kop Cetak Dokumen</h3>
+        <p class="text-xs text-stone-500">Spesifikasi dan file gambar yang digunakan untuk kepala surat dokumen cetak.</p>
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+        <div class="p-3 bg-stone-100 rounded-xl border border-stone-200 flex items-center justify-center">
+          <img src={LOGO_URL} alt="Logo Kop" class="h-14 w-auto object-contain" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+        </div>
+        <div class="space-y-1.5 flex-1">
+          <p class="block text-xs font-semibold text-stone-700">Jalur File Logo (Logo Path)</p>
+          <p class="w-full text-xs p-2 border border-stone-300 rounded font-mono bg-stone-50">{LOGO_URL}</p>
+          <p class="text-[11px] text-stone-500">Lokasi file logo standar: <span class="font-mono text-stone-700">public/img/logo-red.png</span>. Ganti logo = taruh file lalu deploy.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-2">
+      <button type="submit" disabled={busy} class="w-full sm:w-auto text-center px-6 py-2.5 text-xs font-semibold text-white bg-[#C2410C] hover:bg-[#9A3412] rounded-lg shadow-sm transition-colors disabled:opacity-50">
+        {busy ? "Menyimpan..." : "Simpan Seluruh Pengaturan"}
+      </button>
+    </div>
   </form>
 </section>

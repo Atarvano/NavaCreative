@@ -72,129 +72,142 @@
  --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
 
  /* --------------------------------------------------------------------------
-    Railway dark: dashboard-only token namespace (ADR-0013). Added ALONGSIDE
-    the Creative Giants tokens above; not one existing token changes value.
-    These generate rw-* utilities (bg-rw-ground, text-rw-off-white,
-    rounded-rw-card, font-rw-serif, ...) but only the dashboard (.dash-root)
-    consumes them, so the landing pages that share this sheet render the same.
+    Ember: dashboard-only token namespace (pengganti Railway dark ADR-0013).
+    Ditambah di samping token Creative Giants di atas; tak satu pun token
+    landing berubah nilainya. Klaim antislop: terracotta hanya untuk elemen
+    interaktif dan status aktif, bukan dekorasi (satu CTA primer per view
+    + item nav aktif + total akhir lembar cetak).
     -------------------------------------------------------------------------- */
- /* Surfaces and ink */
- --color-rw-ground: #13111c; /* app background */
- --color-rw-darker: #08070c; /* deepest wells */
- --color-rw-charcoal: #33323e; /* raised surface: cards, panel */
- --color-rw-white: #ffffff;
- --color-rw-off-white: #f7f7f8; /* primary text on ground */
- --color-rw-light-gray: #a1a0ab; /* secondary text */
- --color-rw-mid-gray: #6c6b7b; /* muted text */
- --color-rw-border-gray: #545260; /* hairline borders */
- --color-rw-link: #dcdce0; /* links and focus ring on dark */
- /* Accent: primary CTAs only (ADR-0013) */
- --color-rw-accent: #9d4edd;
- --color-rw-accent-subtle: #7c3aed;
+ /* Permukaan dan tinta */
+ --color-ember-primary: #c2410c; /* terracotta: CTA, status aktif, fokus */
+ --color-ember-primary-hover: #9a3412; /* burnt sienna: hover primer */
+ --color-ember-bg: #fafaf9; /* warm white: latar aplikasi */
+ --color-ember-surface: #f5f5f4; /* kartu, panel, modal */
+ --color-ember-raised: #e7e5e4; /* hover baris, tab aktif */
+ --color-ember-ink: #1c1917; /* teks utama warm near-black */
+ --color-ember-secondary: #57534e; /* teks kedua */
+ --color-ember-muted: #78716c; /* stone: placeholder, metadata */
+ --color-ember-border: #d6d3d1; /* tepi kartu, divider, input */
 
- /* Status text variants (ADR-0013 Q19, AA-verified on #13111C). Kept as named
-    tokens so badges never hand-pick a hex. Backgrounds are laid on with an
-    alpha of the base colour; text uses the lighter variant for contrast.
-    The badge renders on the charcoal surface (#33323E), whose tint is lighter
-    than the ground, so these text variants are tuned to clear >=7:1 on that
-    tint (not only on #13111C). Verified pairs: ok 7.65, warn 7.03, danger 7.21. */
- --color-rw-ok: #3fb950;
- --color-rw-ok-text: #a5f3b6;
- --color-rw-warn: #d29922;
- --color-rw-warn-text: #f5d68a;
- --color-rw-danger: #f85149;
- --color-rw-danger-text: #ffc7c2;
- --color-rw-info: #58a6ff;
+ /* Radii: tombol/input 8px, kartu/panel/modal 12px, avatar/chip pill. */
+ --radius-ember-control: 8px;
+ --radius-ember-card: 12px;
 
- /* Radii: no pills on the dashboard */
- --radius-rw-control: 6px; /* buttons, inputs */
- --radius-rw-card: 8px; /* cards, panel */
- --radius-rw-badge: 4px; /* status badges */
-
- /* Font stacks: IBM Plex Serif display + Inter UI (loaded in dashboard.html) */
- --font-rw-serif:
-  "IBM Plex Serif", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
- --font-rw-sans:
-  "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-  "Segoe UI", Roboto, sans-serif;
+ /* Font: Plus Jakarta Sans UI + JetBrains Mono angka (dimuat di dashboard.html) */
+ --font-ember-sans:
+  "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+  BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+ --font-ember-mono:
+  "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* ==========================================================================
-   Dashboard scope (.dash-root) - Railway dark foundation (ticket 01, ADR-0013).
-   UNLAYERED on purpose so it overrides both base.css (light body, black focus
-   ring, h1-h3 weight 300 - all in the `base` layer) AND the weight utilities
-   still on the dashboard headings, WITHOUT editing base.css. Scoped to
-   .dash-root, which only the dashboard carries, so the shared landing and
-   login pages are untouched.
+   Dashboard scope (.dash-root) - Ember light foundation (pengganti Railway).
+   UNLAYERED agar menang atas base.css (body canvas, outline hitam, h1-h3 300
+   di layer `base`) TANPA menyentuh base.css. Hanya .dash-root yang memakai,
+   jadi landing tetap byte-identical (ADR-0002) dan halaman login Ember yang
+   tidak pakai .dash-root ikut terang dengan sendirinya.
    ========================================================================== */
 .dash-root {
-  background: var(--color-rw-ground);
-  color: var(--color-rw-off-white);
-  font-family: var(--font-rw-sans);
+  background: var(--color-ember-bg);
+  color: var(--color-ember-ink);
+  font-family: var(--font-ember-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Focus ring: base.css uses a black outline that disappears on #13111C; a
-   light neutral ring keeps a clear (>= 3:1) indicator on ground and surfaces
-   for keyboard users (antislop R-32 / R-25). */
-.dash-root :focus-visible {
-  outline: 2px solid var(--color-rw-link);
-  outline-offset: 2px;
+/* Reset fokus + tombol ala preflight Tailwind (dipakai prototipe via CDN).
+   WAJIB di @layer base: aturan unlayered menang atas utility berlayer apa
+   pun, jadi reset unlayered ikut mematikan bg-stone-200/70 + border-l-[3px]
+   milik item nav aktif (pernah kejadian: item aktif jadi transparan). Di
+   layer base, utility menang seperti di prototipe. Scoped .dash-root agar
+   tombol landing tidak tersentuh. Fokus digambar none seperti prototipe
+   (navigate() hanya tukar kelas); lokasi diumumkan via aria-current. */
+@layer base {
+  .dash-root :focus,
+  .dash-root :focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
+  .dash-root button {
+    background-color: transparent;
+    background-image: none;
+    border-style: solid;
+    border-width: 0;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
 }
 
-/* View titles in IBM Plex Serif 500; the rest of the UI stays Inter. */
+/* Judul view tegas (bukan 300 ala landing): display tight ala Ember. */
 .dash-root h1,
 .dash-root h2,
 .dash-root h3 {
-  font-family: var(--font-rw-serif);
-  font-weight: 500;
+  font-family: var(--font-ember-sans);
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
-/* Landing rhythm reset (ticket 03): base.css pads every <section> with
-   `clamp(64px, 11vh, 112px) var(--pad)` for the Creative Giants flow, but the
-   dashboard's <main> already carries the page padding, so that rule double-pads
-   each view. Reset inside .dash-root (base.css untouched, landing byte-identical
-   per ADR-0002). Targets view roots; a nested <section> would inherit it too. */
+/* Reset ritme landing: <main> dashboard sudah bawa padding sendiri. */
 .dash-root section {
   padding: 0;
 }
 
-/* ------------------------------------------------------------------------
-   Panel (ticket 02) — the native <dialog> is only the modal shell; the sheet
-   inside is the visible surface. Strip the UA dialog chrome (border, margin,
-   max-width) so the sheet controls its own size. Scoped to .dash-root so the
-   class names can never reach the shared landing/login sheets (ADR-0002).
-   ------------------------------------------------------------------------ */
-.dash-root .panel::backdrop {
-  background: rgb(8 7 12 / 0.7); /* rw-darker at 70% */
+/* Angka selalu JetBrains Mono tabular agar kolom uang sejajar. */
+.dash-root .num {
+  font-family: var(--font-ember-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Peta kelas prototipe agar comotan index.html jalan apa adanya:
+   font-display = Ember sans tight, font-mono = JetBrains Mono. */
+.dash-root .font-display {
+  font-family: var(--font-ember-sans);
+  letter-spacing: -0.025em;
+}
+.dash-root .font-mono {
+  font-family: var(--font-ember-mono);
 }
 
 /* ------------------------------------------------------------------------
-   Skeleton (ticket 02) — CSS-only loading placeholder. A neutral bar on the
-   charcoal surface; the shimmer is `background-position` only, and it is gated
-   behind prefers-reduced-motion so a reduced-motion user keeps a static bar.
-   Scoped to .dash-root (dashboard-only helper class).
+   Skeleton: placeholder loading CSS-only. Batang netral di atas surface;
+   shimmer hanya background-position dan mati saat prefers-reduced-motion.
+   Scoped .dash-root (helper khusus dashboard, antislop R-27).
    ------------------------------------------------------------------------ */
 .dash-root .skeleton-bar {
   background: linear-gradient(
     90deg,
-    rgb(161 160 171 / 0.08) 0%,
-    rgb(161 160 171 / 0.18) 50%,
-    rgb(161 160 171 / 0.08) 100%
+    rgb(120 113 108 / 0.08) 0%,
+    rgb(120 113 108 / 0.2) 50%,
+    rgb(120 113 108 / 0.08) 100%
   );
   background-size: 200% 100%;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .dash-root .skeleton-bar {
-    animation: rw-skeleton 1.4s ease-in-out infinite;
+    animation: ember-skeleton 1.4s ease-in-out infinite;
   }
 }
 
-@keyframes rw-skeleton {
+@keyframes ember-skeleton {
   0% {
     background-position: 200% 0;
   }
   100% {
     background-position: -200% 0;
+  }
+}
+
+/* Hormati reduced motion global di dalam dashboard. */
+@media (prefers-reduced-motion: reduce) {
+  .dash-root *,
+  .dash-root *::before,
+  .dash-root *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -1,150 +1,160 @@
+<!-- View RAB Ember: comot struktur index.html.
+     Mapping backend: nomor/tanggal_rab/nama_project/nama_client + baris;
+     tanpa validUntil (API tidak punya). Status via PATCH langsung (Ditolak
+     dan Revisi ikut prototipe), approved terkunci lalu tombol Jadikan
+     Transaksi. Cetak ikut lembar RAB Ember. -->
 <script>
-  // RabView (spec: ticket 09). Extracted from DashboardApp.svelte's
-  // `{#if view === 'rab'}` block plus its `rabRow` row snippet, moved as a unit.
-  // Markup unchanged byte-for-byte.
-  //
-  // Owns its UI state (search, status filter, sort, expanded row). Data + the
-  // mutation actions come from the store via the shell's props (ADR-0014).
-  import { rupiah, grupBaris, urutkan, rwChip } from '../lib/format.js';
-  import { printRab as printRabPure } from '../lib/print.js';
+  import { state as store, statusRab, setujui } from "../lib/store.svelte.js";
+  import { rupiah, tgl } from "../lib/format.js";
+  import { lembarRab } from "../lib/print-ember.js";
+  import { openDrawer, showPrint } from "../lib/ui.svelte.js";
+  import { go } from "../lib/nav.svelte.js";
 
-  let { rabs, settings, onBukaBuilder, onStatus, onSetujui } = $props();
+  let search = $state("");
+  let status = $state("semua");
+  let sort = $state("newest");
+  let busyId = $state(null);
 
-  // --- UI state (per-view) ---
-  let openRabId = $state(null);
-  let rabSearch = $state('');
-  let rabStatusFilter = $state('semua');
-  let rabSortKey = $state(null); // null = id desc (default terbaru)
-  let rabSortDesc = $state(true);
+  const list = $derived.by(() => {
+    let rows = [...store.rabs];
+    const q = search.trim().toLowerCase();
+    if (q)
+      rows = rows.filter((r) =>
+        [r.nomor, r.nama_project, r.nama_client].filter(Boolean).join(" ").toLowerCase().includes(q),
+      );
+    if (status !== "semua") rows = rows.filter((r) => r.status === status);
+    if (sort === "highest") rows.sort((a, b) => b.total - a.total);
+    else if (sort === "lowest") rows.sort((a, b) => a.total - b.total);
+    else rows.sort((a, b) => b.id - a.id);
+    return rows;
+  });
 
-  const RAB_STATUSES = ['draft', 'sent', 'approved', 'rejected'];
+  const badge = (s) =>
+    ({
+      draft: "bg-stone-100 text-stone-800 border-stone-200",
+      sent: "bg-blue-100 text-blue-800 border-blue-200",
+      approved: "bg-emerald-100 text-emerald-800 border-emerald-200",
+      rejected: "bg-red-100 text-red-800 border-red-200",
+    })[s] ?? "bg-stone-100 text-stone-700 border-stone-200";
 
-  // Search: nomor + project + client + perusahaan (Q24). Sort: satu kolom
-  // client-side (Total), klik cycle desc→asc→terbaru.
-  const rabFiltered = $derived(
-    (() => {
-      const q = rabSearch.trim().toLowerCase();
-      let rows = rabs.filter((r) => {
-        const okStatus = rabStatusFilter === 'semua' || r.status === rabStatusFilter;
-        const hay = [r.nomor, r.nama_project, r.nama_client, r.perusahaan_client].filter(Boolean).join(' ').toLowerCase();
-        return okStatus && (!q || hay.includes(q));
-      });
-      if (rabSortKey) {
-        const dir = rabSortDesc ? -1 : 1;
-        rows = [...rows].sort((a, b) => (a[rabSortKey] - b[rabSortKey]) * dir);
-      }
-      return rows;
-    })(),
-  );
-
-  function rabUrutkan(key) {
-    urutkan(() => [rabSortKey, rabSortDesc], (k, d) => { rabSortKey = k; rabSortDesc = d; }, key);
+  async function gantiStatus(r, s) {
+    busyId = r.id;
+    try {
+      await statusRab(r, s);
+    } finally {
+      busyId = null;
+    }
   }
 
-  // Expand grup kategori + subtotal, plek dokumen (Q32).
-  const rabGrup = (r) => grupBaris(r.baris);
+  async function setujuiRab(r) {
+    busyId = r.id;
+    try {
+      const id = await setujui(r);
+      if (id != null) go("transaksi");
+    } finally {
+      busyId = null;
+    }
+  }
 
-  // Print needs the row grouper, which lives here; print.js stays store-free.
-  const printRab = (r) => printRabPure(r, settings, rabGrup);
+  function cetakRab(r) {
+    showPrint("Cetak Dokumen RAB", lembarRab(r, store.settings));
+  }
 </script>
 
-{#snippet rabRow(r)}
-  <tr class="border-b border-rw-border-gray/40 align-top scroll-mt-24 {openRabId === r.id ? 'bg-rw-darker' : ''}">
-    <td class="px-3 py-2 whitespace-nowrap max-md:py-3">{r.nomor}</td>
-    <td class="px-3 py-2 max-md:py-3"><p class="text-body font-normal">{r.nama_project}</p></td>
-    <td class="px-3 py-2 max-md:py-3">
-      {r.nama_client}
-      {#if r.perusahaan_client}<p class="text-caption text-rw-light-gray">{r.perusahaan_client}</p>{/if}
-    </td>
-    <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap max-md:py-3">{rupiah(r.total)}</td>
-    <td class="px-3 py-2 max-md:py-3"><span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(r.status)}">{r.status}</span></td>
-    <td class="px-3 py-2 max-md:py-3">
-      <div class="flex flex-wrap items-center justify-end gap-3">
-        {#if r.status === 'draft'}
-          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onStatus(r, 'sent')}>Kirim</button>
-        {:else if r.status === 'sent'}
-          <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => onSetujui(r)}>Setujui</button>
-        {/if}
-        <button class="underline scroll-mt-32 max-md:inline-flex max-md:min-h-[44px] max-md:items-center" onclick={() => (openRabId = openRabId === r.id ? null : r.id)}>{openRabId === r.id ? 'Tutup' : 'Rincian'}</button>
-      </div>
-    </td>
-  </tr>
-  {#if openRabId === r.id}
-  <tr class="bg-rw-darker"><td colspan="6" class="px-3 py-4">
-    <div class="grid gap-2">
-      {#each rabGrup(r) as g (g.kategori)}
-        <p class="text-caption uppercase text-rw-light-gray">{g.kategori}: subtotal {rupiah(g.subtotal)}</p>
-        <ul class="grid gap-1 text-body-sm">
-          {#each g.baris as b (b.id)}
-            <li class="flex justify-between gap-2"><span>{b.nama} × {b.qty} {b.satuan} <span class="text-rw-light-gray">[{b.jenis}]</span></span><span class="tabular-nums">{rupiah(b.qty * b.harga_satuan)}</span></li>
+<section id="view-rab" class="view-panel space-y-4" aria-label="RAB estimasi">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+    <div class="relative flex-1 max-w-md w-full">
+      <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-stone-400" aria-hidden="true">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+      </span>
+      <input type="text" bind:value={search} placeholder="Cari nomor RAB, klien, proyek..." aria-label="Cari RAB" class="w-full text-xs pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C2410C]/20 focus:border-[#C2410C] focus:bg-white transition-all" />
+    </div>
+
+    <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+      <select bind:value={status} aria-label="Filter status RAB" class="flex-1 sm:flex-none text-xs p-2 border border-stone-300 rounded-lg focus:border-[#C2410C] bg-white min-w-[120px]">
+        <option value="semua">Semua Status</option>
+        <option value="draft">Draft</option>
+        <option value="sent">Sent (Terkirim)</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+      </select>
+
+      <select bind:value={sort} aria-label="Urut RAB" class="flex-1 sm:flex-none text-xs p-2 border border-stone-300 rounded-lg focus:border-[#C2410C] bg-white min-w-[120px]">
+        <option value="newest">Terbaru</option>
+        <option value="highest">Total Tertinggi</option>
+        <option value="lowest">Total Terendah</option>
+      </select>
+
+      <button type="button" onclick={() => openDrawer("rab")} class="w-full sm:w-auto text-center px-4 py-2 text-xs font-semibold text-white bg-[#C2410C] hover:bg-[#9A3412] rounded-lg shadow-sm transition-colors whitespace-nowrap">+ RAB Baru</button>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[680px] text-left text-xs">
+        <thead class="bg-stone-50 border-b border-stone-200 text-stone-600">
+          <tr>
+            <th class="py-3 px-3 font-semibold">Nomor RAB</th>
+            <th class="py-3 px-3 font-semibold">Proyek & Klien</th>
+            <th class="py-3 px-3 font-semibold">Tanggal</th>
+            <th class="py-3 px-3 font-semibold">Total Nilai</th>
+            <th class="py-3 px-3 font-semibold">Status</th>
+            <th class="py-3 px-3 font-semibold text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each list as r (r.id)}
+            <tr class="border-b border-stone-200 hover:bg-stone-50/50 transition-colors">
+              <td class="py-3 px-3 font-mono text-xs text-stone-600">{r.nomor}</td>
+              <td class="py-3 px-3">
+                <div class="text-sm font-semibold text-stone-900">{r.nama_project}</div>
+                <div class="text-xs text-stone-500">{r.nama_client}</div>
+              </td>
+              <td class="py-3 px-3 text-xs text-stone-600">
+                <div>Dibuat: {tgl(r.tanggal_rab)}</div>
+              </td>
+              <td class="py-3 px-3 font-mono text-xs font-semibold text-stone-900">
+                {rupiah(r.total)}
+                {#if r.diskon}<div class="text-[10px] text-emerald-700 font-sans">Disc: {rupiah(r.diskon)}</div>{/if}
+              </td>
+              <td class="py-3 px-3">
+                <div class="flex items-center gap-1.5">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border {badge(r.status)}">{r.status}</span>
+                  {#if r.status !== "approved"}
+                    <select
+                      value={r.status}
+                      disabled={busyId === r.id}
+                      onchange={(e) => gantiStatus(r, e.target.value)}
+                      aria-label="Ubah status RAB {r.nomor}"
+                      class="text-xs bg-white border border-stone-300 rounded px-1.5 py-0.5"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="sent">Sent</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  {/if}
+                </div>
+              </td>
+              <td class="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
+                {#if r.status === "approved"}
+                  <button type="button" disabled={busyId === r.id} onclick={() => setujuiRab(r)} class="text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 px-2.5 py-1.5 rounded transition-colors disabled:opacity-50">Jadikan Transaksi</button>
+                {/if}
+                <button type="button" onclick={() => cetakRab(r)} class="text-xs font-semibold text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-2.5 py-1.5 rounded border border-stone-300 transition-colors">Cetak RAB</button>
+                {#if r.status !== "approved"}
+                  <button type="button" onclick={() => openDrawer("rab", r)} class="text-xs font-semibold text-[#C2410C] hover:text-[#9A3412] px-2 py-1.5 rounded border border-stone-200 hover:border-[#C2410C]">Ubah</button>
+                {/if}
+              </td>
+            </tr>
           {/each}
-        </ul>
-      {/each}
-      {#if !rabGrup(r).length}<p class="text-body-sm text-rw-light-gray">Tanpa baris.</p>{/if}
-      <p class="text-body-sm">
-        {#if r.diskon}Diskon −{rupiah(r.diskon)} · {/if}<span class="font-normal">Total {rupiah(r.total)}</span>
-      </p>
-      {#if r.catatan}<p class="text-body-sm text-rw-light-gray">Catatan: {r.catatan}</p>{/if}
+        </tbody>
+      </table>
     </div>
-    <div class="mt-3 flex flex-wrap gap-4 text-body-sm">
-      {#if r.status === 'sent'}
-        <button class="underline" onclick={() => onStatus(r, 'rejected')}>Tolak</button>
-        <button class="underline" onclick={() => onStatus(r, 'draft')}>Revisi</button>
-      {:else if r.status === 'draft'}
-        <button class="underline" onclick={() => onStatus(r, 'rejected')}>Tolak</button>
-      {/if}
-      {#if r.status === 'rejected'}
-        <button class="underline" onclick={() => onStatus(r, 'draft')}>Revisi</button>
-      {/if}
-      <button class="underline" onclick={() => printRab(r)}>Cetak</button>
-    </div>
-  </td></tr>
-  {/if}
-{/snippet}
 
-<section class="mt-8" data-view="rab">
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <h2 class="text-subheading font-normal">RAB</h2>
-    <button class="rounded-rw-control bg-rw-accent px-5 py-2.5 text-body-sm text-rw-white max-md:py-3" onclick={onBukaBuilder} data-rab-toggle>
-      + RAB baru
-    </button>
+    {#if !list.length}
+      <div class="py-12 text-center text-stone-500">
+        <p class="text-sm font-semibold text-stone-700">Tidak ada dokumen RAB yang ditemukan.</p>
+        <p class="text-xs mt-1">Gunakan tombol + RAB Baru untuk menyusun estimasi penawaran biaya.</p>
+      </div>
+    {/if}
   </div>
-
-  {#if !rabs.length}
-    <p class="mt-4 text-body-sm text-rw-light-gray">Belum ada RAB. Mulai lewat tombol “+ RAB baru” di atas, atau salin dari Paket lewat “Buat RAB”.</p>
-  {:else}
-  <div class="mt-4 flex flex-wrap gap-3">
-    <input class="min-w-40 flex-1 rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm placeholder:text-rw-light-gray max-md:py-3" placeholder="Cari nomor / project / client" bind:value={rabSearch} data-rab-search />
-    <select class="rounded-rw-control border border-rw-border-gray/40 bg-rw-charcoal px-3 py-2 text-body-sm max-md:py-3" bind:value={rabStatusFilter} data-rab-status>
-      <option value="semua">semua status</option>
-      {#each RAB_STATUSES as s (s)}<option value={s}>{s}</option>{/each}
-    </select>
-  </div>
-
-  {#if !rabFiltered.length}
-    <p class="mt-4 text-body-sm text-rw-light-gray">Tidak ada yang cocok dengan pencarian/filter. <button class="underline" onclick={() => { rabSearch = ''; rabStatusFilter = 'semua'; }}>Reset</button></p>
-  {:else}
-  <!-- Rail table (ticket 05): dense on desktop, comfortable on mobile. Same
-       pattern as the Transaksi table (ticket 04). -->
-  <div class="mt-4 overflow-x-auto rounded-rw-card border border-rw-border-gray/40">
-    <table class="w-full min-w-[640px] border-collapse text-body-sm">
-      <thead class="bg-rw-charcoal md:sticky md:top-0">
-        <tr class="border-b border-rw-border-gray/40 text-left text-rw-light-gray">
-          <th class="px-3 py-2 font-normal">Nomor</th>
-          <th class="px-3 py-2 font-normal">Project</th>
-          <th class="px-3 py-2 font-normal">Client</th>
-          <th class="px-3 py-2 text-right font-normal"><button class="underline {rabSortKey === 'total' ? 'font-medium' : ''}" onclick={() => rabUrutkan('total')}>Total {rabSortKey === 'total' ? (rabSortDesc ? '↓' : '↑') : ''}</button></th>
-          <th class="px-3 py-2 font-normal">Status</th>
-          <th class="px-3 py-2 text-right font-normal">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each rabFiltered as r (r.id)}
-          {@render rabRow(r)}
-        {/each}
-      </tbody>
-    </table>
-  </div>
-  {/if}
-  {/if}
 </section>

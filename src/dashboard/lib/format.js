@@ -1,83 +1,28 @@
-// Shared presentation/formatting helpers for the dashboard (spec: ticket 06).
-// Pure functions only — no store import, no DOM. Extracted verbatim from
-// DashboardApp.svelte so "how do we format a rupiah amount" has one answer.
+// Ember dashboard helpers: rupiah, tanggal, matematika baris, badge.
+// Pure, tanpa store dan tanpa DOM. Baris selalu bentuk backend:
+// { jenis: 'alat'|'jasa'|'biaya', nama, qty, satuan, harga_satuan }.
 
-export const rupiah = (n) => "Rp " + Number(n).toLocaleString("id-ID");
+export const rupiah = (n) => "Rp " + Number(n ?? 0).toLocaleString("id-ID");
 
-// ponytail: one subtotal / one grouper / one sorter for all tables.
+// Satu-satunya penjumlahan baris untuk semua tabel dan drawer.
 export const subtotal = (baris) =>
-  baris.reduce((t, b) => t + b.qty * b.harga_satuan, 0);
+  (baris ?? []).reduce(
+    (t, b) => t + (Number(b.qty) || 0) * (Number(b.harga_satuan) || 0),
+    0,
+  );
 
-export const grupBaris = (baris) => {
-  const by = new Map();
+// Subtotal per jenis untuk kartu dan rincian (label gaya Ember: Alat/Jasa/Biaya).
+const JENIS_LABEL = { alat: "Alat", jasa: "Jasa", biaya: "Biaya" };
+export const subJenis = (baris) => {
+  const s = { Alat: 0, Jasa: 0, Biaya: 0 };
   for (const b of baris ?? []) {
-    const g = b.kategori || "PRODUCTION";
-    if (!by.has(g)) by.set(g, []);
-    by.get(g).push(b);
+    const k = JENIS_LABEL[b.jenis] ?? "Alat";
+    s[k] += (Number(b.qty) || 0) * (Number(b.harga_satuan) || 0);
   }
-  return [...by.entries()].map(([kategori, rows]) => ({
-    kategori,
-    baris: rows,
-    subtotal: subtotal(rows),
-  }));
+  return s;
 };
 
-// Siklus sort satu kolom: desc → asc → terbaru (null). get/set agar
-// tx/rab/inv bisa berbagi badan yang sama.
-export function urutkan(get, set, key) {
-  const [k, desc] = get();
-  if (k === key) set(desc ? k : null, desc ? false : true);
-  else set(key, true);
-}
-
-// Sisa event menuju balik modal pada tarif sekarang — teks badge + tier.
-export const eventKurang = (a) =>
-  a.tarif_event > 0
-    ? Math.max(0, Math.ceil((a.modal - a.pendapatan) / a.tarif_event))
-    : null;
-
-// Badge Balik modal 3-warna (Q11/Q16, ticket 08): hijau balik modal; kuning
-// tinggal ≤3 event; merah selebihnya. Uses the ADR-0013 tint tokens (the same
-// ok/warn/danger family the spec names) so the trio clears ≥7:1 on the tint
-// over the charcoal card; text always accompanies colour.
-export const balikModalBadge = (a) => {
-  if (a.balik_modal)
-    return { cls: "bg-rw-ok/15 text-rw-ok-text", text: "Balik modal" };
-  const kurang = eventKurang(a);
-  if (kurang !== null && kurang <= 3)
-    return {
-      cls: "bg-rw-warn/15 text-rw-warn-text",
-      text: `Kurang ${kurang} event`,
-    };
-  return {
-    cls: "bg-rw-danger/15 text-rw-danger-text",
-    text:
-      kurang === null
-        ? "Belum balik modal"
-        : `Belum balik modal · kurang ${kurang} event`,
-  };
-};
-
-// Chip status 3 warna + teks (Q11): hijau selesai/kuning berjalan/merah bahaya.
-// Satu klasifikasi lifecycle dipakai bersama; `rwChip` memetakan kind ke palet
-// Railway dark (ADR-0013 Q19). Nilai status dari data tetap apa adanya.
-export const statusKind = (status, overdue = false) => {
-  if (overdue || status === "batal" || status === "rejected") return "danger";
-  if (status === "paid" || status === "approved" || status === "selesai")
-    return "ok";
-  return "neutral";
-};
-
-// Chip status versi Railway: teks terang di atas tint 15%, kontras >=7:1 pada
-// permukaan charcoal #33323E tempat badge ini dirender.
-export const rwChip = (status, overdue = false) => {
-  const kind = statusKind(status, overdue);
-  if (kind === "danger") return "bg-rw-danger/15 text-rw-danger-text";
-  if (kind === "ok") return "bg-rw-ok/15 text-rw-ok-text";
-  return "bg-rw-off-white/10 text-rw-off-white";
-};
-
-// Tanggal tampil Indonesia pendek (Q30): 2 Agu 2026. Input tetap date.
+// Tanggal tampil Indonesia pendek: 2 Agu 2026. Input tetap type=date.
 export const tgl = (iso) =>
   iso
     ? new Date(iso + "T00:00:00").toLocaleDateString("id-ID", {
@@ -85,23 +30,64 @@ export const tgl = (iso) =>
         month: "short",
         year: "numeric",
       })
-    : "";
+    : "-";
 
-// H+7 dihitung tanggal LOKAL, bukan UTC (toISOString bisa geser sehari kalau
-// diterbitkan pagi buta WIB).
-// ponytail: en-CA memberi YYYY-MM-DD lokal tanpa padStart manual.
-export const hariIniPlus = (n) => {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d.toLocaleDateString("en-CA");
-};
+// Hari ini lokal YYYY-MM-DD (tanpa geser zona seperti toISOString).
+// ponytail: en-CA memberi format lokal tanpa padStart manual.
+export const hariIni = () => new Date().toLocaleDateString("en-CA");
 
-// Tanggal cetak Indonesia pendek (Q33): "17 Agu 2026". iso = 'YYYY-MM-DD'.
-export const tglCetak = (iso) =>
-  iso
-    ? new Date(iso + "T00:00:00").toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "short",
+// Label kartu kas dari bulan yang dihitung API ("2026-09" -> "September 2026").
+export const bulanLabel = (ym) =>
+  ym
+    ? new Date(ym + "-02T00:00:00").toLocaleDateString("id-ID", {
+        month: "long",
         year: "numeric",
       })
     : "";
+
+export const isOverdue = (jatuhTempo, sisa) =>
+  Number(sisa) > 0 && !!jatuhTempo && hariIni() > jatuhTempo;
+
+// Badge balik modal 3 tingkat dari angka backend (modal + pendapatan).
+export const breakEven = (modal, pendapatan) => {
+  const m = Number(modal) || 0;
+  const p = Number(pendapatan) || 0;
+  const pct = m <= 0 ? 100 : Math.round((p / m) * 100);
+  if (pct >= 100)
+    return {
+      label: `Balik Modal (${pct}%)`,
+      cls: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    };
+  if (pct >= 50)
+    return {
+      label: `Hampir Balik (${pct}%)`,
+      cls: "bg-amber-100 text-amber-800 border-amber-200",
+    };
+  return {
+    label: `Belum Balik (${pct}%)`,
+    cls: "bg-red-100 text-red-800 border-red-200",
+  };
+};
+
+// Satu peta badge status untuk Transaksi, RAB, dan Invoice.
+const BADGE = {
+  terjadwal: ["Terjadwal", "bg-amber-100 text-amber-900 border-amber-200"],
+  berjalan: ["Berjalan", "bg-orange-100 text-[#C2410C] border-orange-200"],
+  selesai: ["Selesai", "bg-emerald-100 text-emerald-800 border-emerald-200"],
+  approved: ["Disetujui", "bg-emerald-100 text-emerald-800 border-emerald-200"],
+  paid: ["Lunas", "bg-emerald-100 text-emerald-800 border-emerald-200"],
+  draft: ["Draft", "bg-stone-100 text-stone-800 border-stone-200"],
+  sent: ["Terkirim", "bg-blue-100 text-blue-800 border-blue-200"],
+  rejected: ["Ditolak", "bg-red-100 text-red-800 border-red-200"],
+  batal: ["Batal", "bg-stone-200 text-stone-700 border-stone-300"],
+  unpaid: ["Belum Lunas", "bg-red-100 text-red-800 border-red-200"],
+  partial: ["Sebagian (DP)", "bg-amber-100 text-amber-800 border-amber-200"],
+};
+
+export const statusBadge = (status) => {
+  const [text, cls] = BADGE[status] ?? [
+    status,
+    "bg-stone-100 text-stone-700 border-stone-200",
+  ];
+  return { text, cls };
+};

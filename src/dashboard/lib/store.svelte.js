@@ -22,10 +22,24 @@
 
 import { ambilDraft, hapusDraft, draftAda, stashDraft } from "./draft.js";
 import { subtotal } from "./format.js";
-import { api, setDraftReaders } from "./api.js";
+import { api } from "./api.js";
+import { showToast } from "./ui.svelte.js";
 
 // Re-exported so existing callers (the shell's onMount) keep one import site.
-export { api, setDraftReaders };
+export { api };
+
+// Ambil draft 401 yang terselamatkan (dipanggil shell sekali setelah load
+// awal). Toast + pembuka drawer jadi urusan pemanggil via openDrawer.
+export function pulihkanDraft401() {
+  const tx = ambilDraft("transaksi");
+  const rb = ambilDraft("rab");
+  const br = ambilDraft("brief");
+  if (draftAda(tx) || draftAda(rb) || br) {
+    showToast("Draft pekerjaan Anda berhasil dipulihkan secara otomatis!");
+    return { tx: draftAda(tx) ? tx : null, rb: draftAda(rb) ? rb : null, br };
+  }
+  return { tx: null, rb: null, br: null };
+}
 
 // --- State --------------------------------------------------------------
 export const state = $state({
@@ -203,6 +217,22 @@ export async function setujui(r) {
   state.notice = `${r.nomor} disetujui → Transaksi #${data.transaksi_id}.`;
   await load();
   return data.transaksi_id;
+}
+
+// Ubah RAB: PATCH header + baris + diskon + catatan selagi belum approved
+// (approved terkunci di API, 409). Dipakai drawer Ubah di RabView.
+export async function ubahRab(id, payload) {
+  const { res, data } = await api(`/api/rab/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    state.error = data.error ?? "Gagal mengubah RAB.";
+    return { ok: false };
+  }
+  state.notice = `${data.nomor} diperbarui.`;
+  await load();
+  return { ok: true, data };
 }
 
 // --- Transaksi ----------------------------------------------------------
