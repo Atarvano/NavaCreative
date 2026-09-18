@@ -8,6 +8,11 @@
 
 @layer theme, base, components, utilities;
 
+/* Tailwind v4 scans sources relative to the Vite root. Pages live in pages/
+   (the Vite root), so scan the app source explicitly. */
+@source "../../src";
+@source "../";
+
 @import "tailwindcss/theme.css" layer(theme);
 @import "./base.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);

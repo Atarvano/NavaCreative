@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, typewrite, reveals, drift, SCRUB_RANGE } from '../lib/motion.js';
+  import { gsap, motion, typewrite, reveals, drift, SCRUB_RANGE } from '../../lib/motion.js';
 
   // Statement line reveal + full-bleed band clip/settle + band parallax
   // (the SCRUB_RANGE Scrub shared with Live frames)

@@ -1,8 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, typewrite, reveals, drift, magnetic } from '../lib/motion.js';
-  import Pill from '../components/ui/Pill.svelte';
-  import { WA_LINK } from '../lib/services.js';
+  import { gsap, motion, typewrite, reveals, drift, magnetic } from '../../lib/motion.js';
+  import Pill from '../../components/ui/Pill.svelte';
+  import { WA_LINK } from '../../lib/services.js';
 
   // CTA heading line reveal + magnetic button (desktop) + stills plates
   // scale/opacity rise with CSS translateY offsets preserved: only opacity

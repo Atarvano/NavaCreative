@@ -2,6 +2,31 @@
   // DashboardApp: shell #54, tabel Transaksi #55 / RAB #56 / Invoice #57,
   // Ringkasan #58, Alat cards + servis lapis-dua + arsip toggle #59.
   import { onMount } from 'svelte';
+  import { rupiah, subtotal, grupBaris, urutkan, eventKurang, balikModalBadge, statusKind, rwChip, tgl, hariIniPlus, tglCetak } from './dashboard/lib/format.js';
+  import { stashDraft, ambilDraft, hapusDraft, draftAda } from './dashboard/lib/draft.js';
+  import { LOGO_PATH, MERAH, kopDokumen as kopDokumenPure, CETAK_CSS as CETAK_CSS_PURE, cetakDokumen, printRab as printRabPure, printInvoice as printInvoicePure, printBrief as printBriefPure } from './dashboard/lib/print.js';
+  // Store (ticket 07, ADR-0014): data + actions live in a shared rune module.
+  // This component consumes it and owns only UI state. The store exposes ONE
+  // reactive `state` object (Svelte 5 makes imported bindings read-only, so a
+  // bare `export let` could not be assigned from here). `s` is a local alias,
+  // and the `$derived` bindings below keep the markup's bare names working.
+  import * as store from './dashboard/lib/store.svelte.js';
+  // Nav (ticket 08, ADR-0014): hash-based navigation + the pending-panel bridge.
+  // The shell registers its Panel / per-view hooks below; nav never imports them.
+  import { NAV, VIEW_KEYS, view as navView, setNavHooks, setPendingPanel, tampilkan, lompatInvoice, lompatTransaksi, go, viewDariHash } from './dashboard/lib/nav.svelte.js';
+  import {
+    api, load, logout, muatRingkasan, setDraftReaders,
+    addAlat as storeAddAlat, arsipkan as storeArsipkan, aktifkan as storeAktifkan,
+    muatServis, addServis as storeAddServis,
+    simpanPaket as storeSimpanPaket, dariPaket as storeDariPaket,
+    simpanRab as storeSimpanRab, statusRab as storeStatusRab, setujui as storeSetujui,
+    simpanTransaksi as storeSimpanTransaksi, statusTransaksi as storeStatusTransaksi,
+    muatBrief, simpanBrief as storeSimpanBrief,
+    terbitkan as storeTerbitkan, muatInvoice, simpanTempo as storeSimpanTempo,
+    bayar as storeBayar, voidInvoice as storeVoidInvoice,
+    simpanSettings as storeSimpanSettings,
+  } from './dashboard/lib/store.svelte.js';
+  const s = store.state;
   // Nav icons (ADR-0013, ticket 02): per-icon imports from @lucide/svelte so the
   // bundle only carries the seven glyphs the sidebar uses. Each glyph names its
   // view's artifact (overview / money transfer / budget doc / bill / package /
@@ -18,13 +43,19 @@
   import User from '@lucide/svelte/icons/user';
   import X from '@lucide/svelte/icons/x';
 
-  let me = $state(null);
-  let alat = $state([]);
-  let paket = $state([]);
-  let error = $state('');
-  let notice = $state('');
-  let busy = $state(false);
-
+  // Store-backed data, aliased to the bare names the markup already uses.
+  // (Read-only views of store.state; writes go through store actions below.)
+  const me = $derived(s.me);
+  const alat = $derived(s.alat);
+  const paket = $derived(s.paket);
+  const rabs = $derived(s.rabs);
+  const transaksi = $derived(s.transaksi);
+  const invoices = $derived(s.invoices);
+  const settings = $derived(s.settings);
+  const ringkasan = $derived(s.ringkasan);
+  const error = $derived(s.error);
+  const notice = $derived(s.notice);
+  const busy = $derived(s.busy);
   // Add-alat form (no manual modal field anywhere — G2).
   let nama = $state('');
   let hargaBeli = $state('');
@@ -48,24 +79,6 @@
   // Arsip paling bawah (Q27): yang masih dipakai tak tenggelam di bawah arsip.
   const alatAktif = $derived(alat.filter((a) => a.is_active));
   const alatArsip = $derived(alat.filter((a) => !a.is_active));
-
-  // Sisa event menuju balik modal pada tarif sekarang — teks badge + tier.
-  const eventKurang = (a) =>
-    a.tarif_event > 0 ? Math.max(0, Math.ceil((a.modal - a.pendapatan) / a.tarif_event)) : null;
-
-  // Badge Balik modal 3-warna (Q11/Q16, ticket 08): hijau balik modal; kuning
-  // tinggal ≤3 event; merah selebihnya. Uses the ADR-0013 tint tokens (the same
-  // ok/warn/danger family the spec names) so the trio clears ≥7:1 on the tint
-  // over the charcoal card; text always accompanies colour.
-  const balikModalBadge = (a) => {
-    if (a.balik_modal) return { cls: 'bg-rw-ok/15 text-rw-ok-text', text: 'Balik modal' };
-    const kurang = eventKurang(a);
-    if (kurang !== null && kurang <= 3) return { cls: 'bg-rw-warn/15 text-rw-warn-text', text: `Kurang ${kurang} event` };
-    return {
-      cls: 'bg-rw-danger/15 text-rw-danger-text',
-      text: kurang !== null ? `Belum balik modal · kurang ${kurang} event` : 'Belum balik modal',
-    };
-  };
 
   // Tombol + membuka form tambah pendek; tutup = buang isian.
   function bukaAlatBuilder() {
@@ -170,9 +183,9 @@
   // One submit for both modes: POST when adding, PATCH when editing.
   async function simpanPaket(e) {
     e.preventDefault();
-    error = '';
-    notice = '';
-    busy = true;
+    s.error = '';
+    s.notice = '';
+    s.busy = true;
     try {
       const editing = pkMode === 'edit' && pkTarget;
       const { res, data } = await api(editing ? `/api/paket/${pkTarget.id}` : '/api/paket', {
@@ -180,10 +193,10 @@
         body: JSON.stringify({ nama: pkNama, deskripsi: pkDeskripsi, baris: pkBaris }),
       });
       if (!res.ok) {
-        error = data.error ?? (editing ? 'Gagal mengubah paket.' : 'Gagal menyimpan paket.');
+        s.error = data.error ?? (editing ? 'Gagal mengubah paket.' : 'Gagal menyimpan paket.');
         return;
       }
-      notice = editing
+      s.notice = editing
         ? `${data.nama ?? pkNama} diubah. RAB/Transaksi lama tidak ikut berubah.`
         : `${data.nama ?? pkNama} ditambahkan.`;
       pkReset();
@@ -191,16 +204,16 @@
       tutupPanel();
       await load();
     } finally {
-      busy = false;
+      s.busy = false;
     }
   }
 
   // Studio identity for document headers (Q23, auto-fill from settings).
-  let settings = $state({});
+  // settings / rabs / transaksi / invoices now live in the store (ticket 07).
 
   // RAB (#43): list + builder (header + rows, from paket or blank).
-  let rabs = $state([]);
-  let transaksi = $state([]);
+  // openTransaksiId / openRabId stay here (UI state); the LISTS are in the store.
+
   let openTransaksiId = $state(null);
   let openRabId = $state(null);
   let rbProject = $state('');
@@ -217,123 +230,43 @@
   let nbJenis = $state('alat');
   let nbKategori = $state('PRODUCTION');
 
-  const rupiah = (n) => 'Rp ' + Number(n).toLocaleString('id-ID');
-  // ponytail: one subtotal / one grouper / one sorter for all tables.
-  const subtotal = (baris) => baris.reduce((t, b) => t + b.qty * b.harga_satuan, 0);
-  const grupBaris = (baris) => {
-    const by = new Map();
-    for (const b of baris ?? []) {
-      const g = b.kategori || 'PRODUCTION';
-      if (!by.has(g)) by.set(g, []);
-      by.get(g).push(b);
-    }
-    return [...by.entries()].map(([kategori, rows]) => ({ kategori, baris: rows, subtotal: subtotal(rows) }));
-  };
-  // Siklus sort satu kolom: desc → asc → terbaru (null). get/set agar
-  // tx/rab/inv bisa berbagi badan yang sama.
-  function urutkan(get, set, key) {
-    const [k, desc] = get();
-    if (k === key) set(!desc ? null : k, !desc ? true : false);
-    else set(key, true);
-  }
+  // rupiah / subtotal / grupBaris / urutkan removed: imported from ./dashboard/lib/format.js
 
-  // --- Cetak plek dokumen asli (redesign 08, #61) ---
-  // Logo merah studio: file statis di public/ (B5). Sampai user menaruh file,
-  // kop memakai fallback teks nama studio. Path ini juga disebut di Settings
-  // (Q29) supaya mengganti logo = taruh file + deploy, tanpa ubah kode.
-  const LOGO_PATH = 'img/logo-red.png';
-  const MERAH = '#b3001b'; // merah kop dokumen (di luar palet landing; cetak saja)
+  // LOGO_PATH / MERAH / tglCetak / kopDokumen / CETAK_CSS / cetakDokumen removed:
+  // imported from ./dashboard/lib/print.js (printed output stays byte-identical).
 
-  // Tanggal cetak Indonesia pendek (Q33): "17 Agu 2026". iso = 'YYYY-MM-DD'.
-  const tglCetak = (iso) =>
-    iso
-      ? new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-      : '';
-
-  // Kop merah: slot logo + fallback teks sampai file disuplai, identitas dari
-  // settings (Q23). Inline style + tabel agar konsisten di jendela print polos.
-  function kopDokumen(subjudul = '') {
-    const s = settings;
-    const kontak = [s.hp, s.email].filter(Boolean).join(' · ');
-    const logo = `<img src="${LOGO_PATH}" alt="${s.nama ?? 'Nava Creative'}" style="height:56px;display:block" onerror="this.style.display='none';document.getElementById('kop-fallback').style.display='block'" />`;
-    const fallback = `<div id="kop-fallback" style="display:none;font-size:26px;font-weight:700;color:${MERAH};letter-spacing:-0.02em">${s.nama ?? 'Nava Creative'}</div>`;
-    return `<table style="width:100%;border-collapse:collapse;border-bottom:3px solid ${MERAH};padding-bottom:12px"><tr>
-      <td style="vertical-align:middle">${logo}${fallback}</td>
-      <td style="vertical-align:middle;text-align:right;font-size:12px;color:#333">
-        ${subjudul ? `<div style="font-weight:700;color:${MERAH}">${subjudul}</div>` : ''}
-        ${kontak ? `<div>${kontak}</div>` : ''}
-      </td></tr></table>`;
-  }
-
-  // CSS dasar semua dokumen cetak plek (font, margin, warna judul merah).
-  const CETAK_CSS = `body{font-family:Arial,Helvetica,sans-serif;max-width:720px;margin:32px auto;color:#111;font-size:13px}
-    h1{color:${MERAH};font-size:22px;margin:18px 0 10px;letter-spacing:0}
-    table.layout{width:100%;border-collapse:collapse}
-    .merah{color:${MERAH}}`;
-  // ponytail: satu pintu cetak — 3 print fn hanya menyetor judul + body.
-  function cetakDokumen(judul, body) {
-    const w = window.open('', '_blank');
-    w.document.write(`<html lang="id"><head><meta charset="utf-8"><title>${judul}</title><style>${CETAK_CSS}</style></head><body onload="print()">${body}</body></html>`);
-    w.document.close();
-  }
-
-  async function api(path, opts = {}) {
-    const res = await fetch(path, {
-      ...opts,
-      headers: { 'content-type': 'application/json', ...(opts.headers ?? {}) },
-    });
-    if (res.status === 401) {
-      // Q36: selamatkan draft builder sebelum pindah ke login.
-      const d = txDraft();
-      if (d.nama_project || d.nama_client || d.baris?.length) stashDraft('transaksi', d);
-      const rd = rbDraft();
-      if (draftAda(rd)) stashDraft('rab', rd);
-      if (briefOpenId) stashDraft('brief', { transaksi_id: briefOpenId, form: brForm });
-      location.href = 'login.html';
-      throw new Error('unauthorized');
-    }
-    const data = await res.json().catch(() => ({}));
-    return { res, data };
-  }
-
-  async function load() {
-    const { res, data } = await api('/api/alat');
-    if (!res.ok) {
-      error = data.error ?? 'Gagal memuat alat.';
-      return;
-    }
-    alat = data.alat;
-    const pr = await api('/api/paket');
-    if (pr.res.ok) paket = pr.data.paket;
-    const rr = await api('/api/rab');
-    if (rr.res.ok) rabs = rr.data.rab;
-    const tr = await api('/api/transaksi');
-    if (tr.res.ok) transaksi = tr.data.transaksi;
-    const ir = await api('/api/invoice');
-    if (ir.res.ok) invoices = ir.data.invoice;
-    // Identity auto-fill source (Q23); print views read from here.
-    const sr = await api('/api/settings');
-    if (sr.res.ok) settings = sr.data.settings;
-  }
+  // api() and load() removed: both live in the store (ticket 07, ADR-0014);
+  // imported above. The store's api() is the same fetch wrapper with the 401
+  // draft-rescue branch, which reads the builders' draft readers registered
+  // in onMount below.
 
   onMount(async () => {
+    // Register the builder draft readers with the store's HTTP client (ticket 07).
+    // The 401 branch calls these to snapshot a half-typed walk-in / RAB / Brief
+    // before redirecting to login (Q36). They live here because the builder form
+    // fields are UI state of this component, not of the store.
+    setDraftReaders({
+      tx: () => txDraft(),
+      rab: () => rbDraft(),
+      brief: () => (briefOpenId ? { transaksi_id: briefOpenId, form: brForm } : null),
+    });
     try {
       const meRes = await fetch('/api/auth/me');
       if (meRes.status === 401) {
         location.href = 'login.html';
         return;
       }
-      me = (await meRes.json()).username;
+      s.me = (await meRes.json()).username;
       await load();
       // Q36: draft terselamatkan saat 401 dibuka kembali + notice.
       const drafTx = ambilDraft('transaksi');
       if (draftAda(drafTx)) {
         txMuatDraft(drafTx);
-        notice = 'Draft walk-in terselamatkan dari sesi sebelumnya.';
+        s.notice = 'Draft walk-in terselamatkan dari sesi sebelumnya.';
       }
       const drafBrief = ambilDraft('brief');
       if (drafBrief) {
-        notice = draftAda(drafTx)
+        s.notice = draftAda(drafTx)
           ? 'Draft walk-in + Brief terselamatkan dari sesi sebelumnya — buka Rincian barisnya untuk lanjut Brief.'
           : 'Draft Brief terselamatkan dari sesi sebelumnya — buka Rincian barisnya untuk lanjut.';
       }
@@ -341,69 +274,43 @@
       if (draftAda(drafRab)) {
         rbMuatDraft(drafRab);
         // Draft is seeded into state; the Panel opens from “+ RAB baru” (ticket 05).
-        notice = 'Draft RAB terselamatkan dari sesi sebelumnya, buka “+ RAB baru” untuk lanjut.';
+        s.notice = 'Draft RAB terselamatkan dari sesi sebelumnya, buka “+ RAB baru” untuk lanjut.';
       }
       await tampilkan(viewDariHash() ?? 'ringkasan');
     } catch {
-      error = 'Tidak bisa menghubungi server.';
+      s.error = 'Tidak bisa menghubungi server.';
     }
   });
 
   async function addAlat(e) {
     e.preventDefault();
-    error = '';
-    notice = '';
-    busy = true;
+    s.error = '';
+    s.notice = '';
+    s.busy = true;
     try {
-      const { res, data } = await api('/api/alat', {
-        method: 'POST',
-        body: JSON.stringify({
-          nama,
-          harga_beli: Number(hargaBeli),
-          tarif_event: Number(tarifEvent),
-        }),
+      await storeAddAlat({
+        nama,
+        harga_beli: Number(hargaBeli),
+        tarif_event: Number(tarifEvent),
       });
-      if (!res.ok) {
-        error = data.error ?? 'Gagal menambah alat.';
-        return;
+      if (!error) {
+        nama = '';
+        hargaBeli = '';
+        tarifEvent = '';
+        alatBuilderOpen = false;
       }
-      notice = `${data.nama} ditambahkan. Modal awal ${rupiah(data.modal)}.`;
-      nama = '';
-      hargaBeli = '';
-      tarifEvent = '';
-      alatBuilderOpen = false;
-      await load();
     } finally {
-      busy = false;
+      s.busy = false;
     }
   }
 
-  // Arsip = satu-satunya aksi Alat yang selalu confirm (Q45), dan confirm-nya
-  // beda-bobot dari aksi lain: tiga kalimat berurutan (arsip → riwayat aman →
-  // cara mengaktifkan lagi), bukan satu kalimat. Tanpa hapus fisik (B4).
   async function arsipkan(a) {
     if (!confirm(`Arsipkan ${a.nama}? Kartu pindah ke daftar arsip (default tersembunyi).\n\nRiwayat servis, modal, dan pendapatan tetap tersimpan — tidak ada yang dihapus.\n\nAktifkan lagi kapan saja lewat toggle “Tampilkan arsip”.`)) return;
-    const { res, data } = await api(`/api/alat/${a.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_active: false }),
-    });
-    if (!res.ok) error = data.error ?? 'Gagal mengarsipkan.';
-    else {
-      notice = `${a.nama} diarsipkan — aktifkan lagi lewat toggle “Tampilkan arsip”.`;
-      await load();
-    }
+    await storeArsipkan(a);
   }
 
   async function aktifkan(a) {
-    const { res, data } = await api(`/api/alat/${a.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_active: true }),
-    });
-    if (!res.ok) error = data.error ?? 'Gagal mengaktifkan kembali.';
-    else {
-      notice = `${a.nama} aktif kembali.`;
-      await load();
-    }
+    await storeAktifkan(a);
   }
 
   async function toggle(a) {
@@ -417,8 +324,7 @@
     svTanggal = '';
     svKeterangan = '';
     svBiaya = '';
-    const { res, data } = await api(`/api/alat/${a.id}/servis`);
-    servisRows = res.ok ? data.servis : [];
+    servisRows = await muatServis(a.id);
   }
 
   // Form catat = lapis-dua di dalam expand (Q18): riwayat dulu, form di balik
@@ -436,29 +342,18 @@
 
   async function addServis(a, e) {
     e.preventDefault();
-    error = '';
-    const { res, data } = await api(`/api/alat/${a.id}/servis`, {
-      method: 'POST',
-      body: JSON.stringify({
-        tanggal: svTanggal,
-        keterangan: svKeterangan,
-        biaya: Number(svBiaya),
-      }),
+    s.error = '';
+    const data = await storeAddServis(a, {
+      tanggal: svTanggal,
+      keterangan: svKeterangan,
+      biaya: Number(svBiaya),
     });
-    if (!res.ok) {
-      error = data.error ?? 'Gagal mencatat servis.';
-      return;
-    }
-    notice = `Servis ${rupiah(data.biaya)} tercatat. Modal ${a.nama} bertambah.`;
-    await load();
+    if (!data) return;
     servisRows = [...servisRows, data];
     servisFormId = null;
   }
 
-  async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    location.href = 'login.html';
-  }
+  // logout() removed: lives in the store (ticket 07); the markup calls it directly.
 
   // --- RAB builder (#56): now opens in the shared Panel (ticket 05) ---
   // Behaviour unchanged; the Panel owns closing (Esc / outside click / button).
@@ -492,7 +387,7 @@
   function bukaRabBuilder() {
     if (draftAda(ambilDraft('rab'))) {
       rbMuatDraft(ambilDraft('rab'));
-      notice = 'Draft RAB sebelumnya dibuka kembali.';
+      s.notice = 'Draft RAB sebelumnya dibuka kembali.';
     }
     bukaPanel('RAB baru', rabBuilderSnippet);
   }
@@ -500,24 +395,24 @@
   // Buat RAB dari Paket (Q19/Q21): salin baris → auto-pindah #/rab + notice.
   // Builder kosong langsung salin; builder isi confirm-timpa dulu.
   async function dariPaket(p) {
-    error = '';
+    s.error = '';
     if (draftAda(rbDraft()) && !confirm('Timpa draft RAB yang sedang diisi dengan baris dari paket ini?')) return;
     const { res, data } = await api(`/api/paket/${p.id}/ke-rab`);
     if (!res.ok) {
-      error = data.error ?? 'Gagal menyalin paket.';
+      s.error = data.error ?? 'Gagal menyalin paket.';
       return;
     }
     rbProject = data.nama_project;
     rbBaris = data.baris.map((b) => ({ ...b }));
     hapusDraft('rab');
-    notice = `Baris ${p.nama} disalin, lengkapi client lalu simpan.`;
+    s.notice = `Baris ${p.nama} disalin, lengkapi client lalu simpan.`;
     // Open the Panel AFTER the view switch: go('rab') fires hashchange ->
     // tampilkan() -> tutupPanel(), so a direct bukaPanel() here would be closed
     // again immediately. pendingPanel is consumed by tampilkan() once on #/rab;
     // when already on #/rab (re-copy), the hash does not change, so open directly.
     if (view === 'rab') bukaRabBuilder();
     else {
-      pendingPanel = { view: 'rab', judul: 'RAB baru', isi: rabBuilderSnippet };
+      setPendingPanel({ view: 'rab', judul: 'RAB baru', isi: rabBuilderSnippet });
       go('rab');
     }
   }
@@ -550,9 +445,9 @@
 
   async function simpanRab(e) {
     e.preventDefault();
-    error = '';
-    notice = '';
-    busy = true;
+    s.error = '';
+    s.notice = '';
+    s.busy = true;
     try {
       const { res, data } = await api('/api/rab', {
         method: 'POST',
@@ -567,16 +462,16 @@
         }),
       });
       if (!res.ok) {
-        error = data.error ?? 'Gagal menyimpan RAB.';
+        s.error = data.error ?? 'Gagal menyimpan RAB.';
         return;
       }
-      notice = `${data.nomor} tersimpan sebagai draft.`;
+      s.notice = `${data.nomor} tersimpan sebagai draft.`;
       resetBuilder();
       hapusDraft('rab');
       tutupPanel();
       await load();
     } finally {
-      busy = false;
+      s.busy = false;
     }
   }
 
@@ -585,9 +480,9 @@
       method: 'PATCH',
       body: JSON.stringify({ status }),
     });
-    if (!res.ok) error = data.error ?? 'Gagal ubah status.';
+    if (!res.ok) s.error = data.error ?? 'Gagal ubah status.';
     else {
-      notice = `${r.nomor} → ${status}.`;
+      s.notice = `${r.nomor} → ${status}.`;
       await load();
     }
   }
@@ -596,50 +491,17 @@
   // + notice. Void + koreksi-minus di Transaksi tetap jadi pengaman.
   async function setujui(r) {
     const { res, data } = await api(`/api/rab/${r.id}/setujui`, { method: 'POST' });
-    if (!res.ok) error = data.error ?? 'Gagal menyetujui.';
+    if (!res.ok) s.error = data.error ?? 'Gagal menyetujui.';
     else {
-      notice = `${r.nomor} disetujui → Transaksi #${data.transaksi_id}.`;
+      s.notice = `${r.nomor} disetujui → Transaksi #${data.transaksi_id}.`;
       await load();
       go('transaksi');
     }
   }
 
-  // Print RAB plek dokumen asli (redesign 08, #61): kop merah (slot logo +
-  // fallback teks), judul merah + nomor sistem, PROJECT vs UNTUK, grup
-  // kategori + subtotal merah, TOTAL FINAL merah, catatan, disclaimer estimasi.
+  // printRab removed: imported from ./dashboard/lib/print.js.
   function printRab(r) {
-    const grup = rabGrup(r);
-    const grupHtml = grup
-      .map((g) => {
-        const baris = g.baris
-          .map(
-            (b) =>
-              `<tr><td style="padding:6px 8px;border-bottom:1px solid #ddd">${b.nama}</td><td style="padding:6px 8px;border-bottom:1px solid #ddd;white-space:nowrap">${b.qty} ${b.satuan ?? ''}</td><td style="padding:6px 8px;border-bottom:1px solid #ddd;text-align:right">${rupiah(b.qty * b.harga_satuan)}</td></tr>`,
-          )
-          .join('');
-        return `<tr><td colspan="3" style="padding:10px 8px 4px;font-weight:700;color:${MERAH};text-transform:uppercase;letter-spacing:0.04em">${g.kategori}</td></tr>
-          ${baris}
-          <tr><td colspan="2" style="padding:6px 8px;text-align:right;font-weight:700;color:${MERAH}">Subtotal ${g.kategori}</td><td style="padding:6px 8px;text-align:right;font-weight:700;color:${MERAH}">${rupiah(g.subtotal)}</td></tr>`;
-      })
-      .join('');
-    cetakDokumen(r.nomor, `
-      ${kopDokumen('RANCANGAN ANGGARAN BIAYA')}
-      <h1>RANCANGAN ANGGARAN BIAYA</h1>
-      <table class="layout" style="margin:8px 0 16px"><tr>
-        <td style="vertical-align:top;width:50%"><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Project</div><div style="font-weight:700;font-size:15px">${r.nama_project}</div></td>
-        <td style="vertical-align:top;width:50%"><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Untuk</div><div style="font-weight:700;font-size:15px">${r.nama_client}${r.perusahaan_client ? ' — ' + r.perusahaan_client : ''}</div></td>
-      </tr></table>
-      <p style="margin:0 0 12px;color:#555">${r.nomor} · ${tglCetak(r.tanggal_rab)}</p>
-      <table class="layout" style="border-top:2px solid #111">
-        <tr><th style="text-align:left;padding:8px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Item</th><th style="text-align:left;padding:8px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Qty</th><th style="text-align:right;padding:8px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Subtotal</th></tr>
-        ${grupHtml}
-      </table>
-      <table class="layout" style="margin-top:8px;border-top:2px solid #111"><tr>
-        <td style="padding:10px 8px;text-align:right;font-weight:700">${r.diskon ? `Diskon −${rupiah(r.diskon)} · ` : ''}TOTAL FINAL</td>
-        <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:18px;color:${MERAH};white-space:nowrap">${rupiah(r.total)}</td>
-      </tr></table>
-      ${r.catatan ? `<p style="margin-top:16px"><b>Catatan</b><br>${r.catatan}</p>` : ''}
-      <p style="margin-top:16px;font-style:italic;color:#555">RAB bersifat estimasi; harga final dapat menyesuaikan scope project.</p>`);
+    printRabPure(r, settings, rabGrup);
   }
 
   // --- Transaksi walk-in + lifecycle + Brief (#44) ---
@@ -697,24 +559,8 @@
 
   // 401 mid-draft (Q36): stash ke localStorage sebelum redirect ke login,
   // restore + notice setelah login. Key per builder.
-  function stashDraft(key, value) {
-    try {
-      localStorage.setItem('nava-draft-' + key, JSON.stringify(value));
-    } catch {}
-  }
-  function ambilDraft(key) {
-    try {
-      const raw = localStorage.getItem('nava-draft-' + key);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  }
-  function hapusDraft(key) {
-    try {
-      localStorage.removeItem('nava-draft-' + key);
-    } catch {}
-  }
+  // stashDraft / ambilDraft / hapusDraft / draftAda removed: imported from
+  // ./dashboard/lib/draft.js (keys + snapshot shapes unchanged).
   const txDraft = () => ({
     nama_project: txProject, nama_client: txClient,
     tanggal_mulai: txMulai, tanggal_selesai: txSelesai, lokasi: txLokasi, baris: txBaris,
@@ -727,7 +573,7 @@
     txLokasi = d.lokasi ?? '';
     txBaris = d.baris ?? [];
   };
-  const draftAda = (d) => !!(d && (d.nama_project || d.nama_client || d.baris?.length));
+  // draftAda removed: imported from ./dashboard/lib/draft.js.
 
   // Walk-in (ticket 04): the builder now opens in the shared Panel instead of
   // pushing the table down (ADR-0012 amendment), mirroring the Brief. The draft
@@ -736,7 +582,7 @@
   function bukaWalkin() {
     if (draftAda(ambilDraft('transaksi'))) {
       txMuatDraft(ambilDraft('transaksi'));
-      notice = 'Draft walk-in sebelumnya dibuka kembali.';
+      s.notice = 'Draft walk-in sebelumnya dibuka kembali.';
     }
     bukaPanel('Walk-in baru', walkinFormSnippet);
   }
@@ -759,16 +605,16 @@
     const draf = ambilDraft('brief');
     if (draf && draf.transaksi_id === t.id) {
       brForm = draf.form;
-      notice = 'Draft Brief sebelumnya dibuka kembali.';
+      s.notice = 'Draft Brief sebelumnya dibuka kembali.';
     }
     bukaPanel(`Brief — ${t.nama_project}`, briefFormSnippet);
   }
 
   async function simpanTransaksi(e) {
     e.preventDefault();
-    error = '';
-    notice = '';
-    busy = true;
+    s.error = '';
+    s.notice = '';
+    s.busy = true;
     try {
       const { res, data } = await api('/api/transaksi', {
         method: 'POST',
@@ -779,10 +625,10 @@
         }),
       });
       if (!res.ok) {
-        error = data.error ?? 'Gagal menyimpan transaksi.';
+        s.error = data.error ?? 'Gagal menyimpan transaksi.';
         return;
       }
-      notice = data.bentrok?.length
+      s.notice = data.bentrok?.length
         ? `Tersimpan — bentrok dengan ${data.bentrok.map((b) => b.nama_project).join(', ')}.`
         : 'Transaksi walk-in tersimpan.';
       hapusDraft('transaksi');
@@ -790,15 +636,15 @@
       tutupPanel();
       await load();
     } finally {
-      busy = false;
+      s.busy = false;
     }
   }
 
   async function statusTransaksi(t, status) {
     const { res, data } = await api(`/api/transaksi/${t.id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-    if (!res.ok) error = data.error ?? 'Gagal ubah status.';
+    if (!res.ok) s.error = data.error ?? 'Gagal ubah status.';
     else {
-      notice = data.bentrok?.length ? `Bentrok: ${data.bentrok.map((b) => b.nama_project).join(', ')}.` : `${t.nama_project} → ${status}.`;
+      s.notice = data.bentrok?.length ? `Bentrok: ${data.bentrok.map((b) => b.nama_project).join(', ')}.` : `${t.nama_project} → ${status}.`;
       await load();
     }
   }
@@ -841,7 +687,8 @@
   const paketGrup = (p) => grupBaris(p.baris);
 
   // --- Invoice (#45): terbit dari transaksi, bayar, void, cetak ---
-  let invoices = $state([]);
+  // invoices now lives in the store (ticket 07).
+
   let openInvoiceId = $state(null);
   let invDetail = $state(null);
   let byTanggal = $state(new Date().toISOString().slice(0, 10));
@@ -893,21 +740,16 @@
   // minus tetap pengaman), tempo default H+7, auto-pindah #/invoice + notice.
   // H+7 dihitung tanggal LOKAL, bukan UTC (toISOString bisa geser sehari
   // kalau diterbitkan pagi buta WIB).
-  // ponytail: en-CA memberi YYYY-MM-DD lokal tanpa padStart manual.
-  const hariIniPlus = (n) => {
-    const d = new Date();
-    d.setDate(d.getDate() + n);
-    return d.toLocaleDateString('en-CA');
-  };
+  // hariIniPlus removed: imported from ./dashboard/lib/format.js.
   async function terbitkan(t) {
     const jt = hariIniPlus(7);
     const { res, data } = await api(`/api/transaksi/${t.id}/invoice`, {
       method: 'POST',
       body: JSON.stringify({ jatuh_tempo: jt }),
     });
-    if (!res.ok) error = data.error ?? 'Gagal menerbitkan invoice.';
+    if (!res.ok) s.error = data.error ?? 'Gagal menerbitkan invoice.';
     else {
-      notice = `${data.nomor} terbit (tempo ${tgl(data.jatuh_tempo)}). Baris transaksi dikunci.`;
+      s.notice = `${data.nomor} terbit (tempo ${tgl(data.jatuh_tempo)}). Baris transaksi dikunci.`;
       await load();
       go('invoice');
     }
@@ -944,110 +786,62 @@
   // list + detail. Overdue ikut berubah (turunan dari tempo).
   async function simpanTempo(i, e) {
     e.preventDefault();
-    error = '';
-    busy = true;
+    s.error = '';
+    s.busy = true;
     try {
       const { res, data } = await api(`/api/invoice/${i.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ jatuh_tempo: invTempo }),
       });
       if (!res.ok) {
-        error = data.error ?? 'Gagal mengubah jatuh tempo.';
+        s.error = data.error ?? 'Gagal mengubah jatuh tempo.';
         return;
       }
-      notice = `Tempo ${i.nomor} diubah ke ${tgl(data.jatuh_tempo)}.`;
+      s.notice = `Tempo ${i.nomor} diubah ke ${tgl(data.jatuh_tempo)}.`;
       invDetail = invDetail ? { ...invDetail, ...data } : invDetail;
       tutupPanel();
       await load();
     } finally {
-      busy = false;
+      s.busy = false;
     }
   }
 
   async function bayar(i, e) {
     e.preventDefault();
-    error = '';
-    busy = true;
+    s.error = '';
+    s.busy = true;
     try {
       const { res, data } = await api(`/api/invoice/${i.id}/bayar`, {
         method: 'POST',
         body: JSON.stringify({ tanggal: byTanggal, jumlah: Number(byJumlah), metode: byMetode }),
       });
       if (!res.ok) {
-        error = data.error ?? 'Gagal mencatat pembayaran.';
+        s.error = data.error ?? 'Gagal mencatat pembayaran.';
         return;
       }
-      notice = `Terbayar ${rupiah(data.dibayar)}, sisa ${rupiah(data.sisa)}.`;
+      s.notice = `Terbayar ${rupiah(data.dibayar)}, sisa ${rupiah(data.sisa)}.`;
       byJumlah = '';
       invDetail = invDetail ? { ...data, transaksi: invDetail.transaksi, baris: invDetail.baris ?? [] } : invDetail;
       tutupPanel();
       await load();
     } finally {
-      busy = false;
+      s.busy = false;
     }
   }
 
   async function voidInvoice(i) {
     if (!confirm(`Batalkan ${i.nomor}? Riwayat tetap tersimpan.`)) return;
     const { res, data } = await api(`/api/invoice/${i.id}/batal`, { method: 'POST' });
-    if (!res.ok) error = data.error ?? 'Gagal membatalkan.';
+    if (!res.ok) s.error = data.error ?? 'Gagal membatalkan.';
     else {
-      notice = `${i.nomor} dibatalkan.`;
+      s.notice = `${i.nomor} dibatalkan.`;
       await load();
     }
   }
 
-  // Print Invoice plek screenshot 181411 (redesign 08, #61): kop (logo + nomor),
-  // judul merah, DARI vs KEPADA, tabel baris, TOTAL merah, lalu seksi
-  // Pembayaran (dibayar + sisa bold + riwayat tanggal+label+metode) di antara
-  // TOTAL dan TRANSFER KE — pengganti Nota (Y2). Bank dari snapshot saat
-  // terbit (bukan settings live), terms 7 hari. Tanggal Indonesia pendek (Q33).
+  // Print Invoice removed: delegates to ./dashboard/lib/print.js (byte-identical).
   function printInvoice() {
-    const i = invDetail;
-    if (!i) return;
-    const rows = (i.baris ?? [])
-      .map(
-        (b) =>
-          `<tr><td style="padding:6px 8px;border-bottom:1px solid #ddd">${b.nama}</td><td style="padding:6px 8px;border-bottom:1px solid #ddd;white-space:nowrap">${b.qty} ${b.satuan ?? ''}</td><td style="padding:6px 8px;border-bottom:1px solid #ddd;text-align:right">${rupiah(b.qty * b.harga_satuan)}</td></tr>`,
-      )
-      .join('');
-    const pays = (i.bayar ?? [])
-      .map(
-        (p) =>
-          `<tr><td style="padding:5px 8px;border-bottom:1px solid #eee">${tglCetak(p.tanggal)}</td><td style="padding:5px 8px;border-bottom:1px solid #eee">${p.label}</td><td style="padding:5px 8px;border-bottom:1px solid #eee">${p.metode}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${rupiah(p.jumlah)}</td></tr>`,
-      )
-      .join('');
-    // Bank dari snapshot terbit (M-snapshot): print lama tak ikut berubah saat
-    // settings bank diganti kemudian. Fallback ke settings bila snapshot kosong.
-    const bankTeks = i.bank_snapshot || [settings.bank, settings.norek, settings.atas_nama].filter(Boolean).join(' ');
-    const s = settings;
-    cetakDokumen(i.nomor, `
-      ${kopDokumen(i.nomor)}
-      <h1>INVOICE</h1>
-      <table class="layout" style="margin:8px 0 16px"><tr>
-        <td style="vertical-align:top;width:50%"><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Dari</div><div style="font-weight:700;font-size:15px">${s.nama ?? ''}</div><div style="color:#555">${[s.hp, s.email].filter(Boolean).join('<br>')}</div></td>
-        <td style="vertical-align:top;width:50%"><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Kepada</div><div style="font-weight:700;font-size:15px">${i.transaksi?.nama_client ?? ''}</div></td>
-      </tr></table>
-      <p style="margin:0 0 12px;color:#555">${i.nomor} · Terbit ${tglCetak(i.tanggal_terbit)} · Jatuh tempo ${tglCetak(i.jatuh_tempo)}</p>
-      <table class="layout" style="border-top:2px solid #111">
-        <tr><th style="text-align:left;padding:8px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Deskripsi</th><th style="text-align:left;padding:8px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Qty</th><th style="text-align:right;padding:8px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">Subtotal</th></tr>
-        ${rows}
-      </table>
-      <table class="layout" style="margin-top:8px;border-top:2px solid #111"><tr>
-        <td style="padding:10px 8px;text-align:right;font-weight:700">TOTAL</td>
-        <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:18px;color:${MERAH};white-space:nowrap">${rupiah(i.total)}</td>
-      </tr></table>
-      <div style="margin-top:16px;padding:12px;border:1px solid #ddd;background:#fafafa">
-        <div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Pembayaran</div>
-        <table class="layout"><tr>
-          <td style="padding:2px 0">Dibayar</td><td style="padding:2px 0;text-align:right">${rupiah(i.dibayar)}</td>
-        </tr><tr>
-          <td style="padding:2px 0;font-weight:700">Sisa</td><td style="padding:2px 0;text-align:right;font-weight:700">${rupiah(i.sisa)}</td>
-        </tr></table>
-        ${pays ? `<table class="layout" style="margin-top:8px"><tr><th style="text-align:left;padding:4px 8px;font-size:11px;color:#777">Tanggal</th><th style="text-align:left;padding:4px 8px;font-size:11px;color:#777">Label</th><th style="text-align:left;padding:4px 8px;font-size:11px;color:#777">Metode</th><th style="text-align:right;padding:4px 8px;font-size:11px;color:#777">Jumlah</th></tr>${pays}</table>` : '<p style="margin:8px 0 0;color:#777">Belum ada pembayaran.</p>'}
-      </div>
-      <p style="margin-top:16px"><b>TRANSFER KE</b><br>${bankTeks}</p>
-      <p style="color:#555">Pembayaran paling lambat 7 hari setelah invoice diterima.</p>`);
+    printInvoicePure(invDetail, settings);
   }
 
   async function bukaTransaksi(t) {
@@ -1067,119 +861,72 @@
   async function simpanBrief(t, e) {
     e.preventDefault();
     const { res, data } = await api(`/api/transaksi/${t.id}/brief`, { method: 'PUT', body: JSON.stringify(brForm) });
-    if (!res.ok) error = data.error ?? 'Gagal menyimpan brief.';
+    if (!res.ok) s.error = data.error ?? 'Gagal menyimpan brief.';
     else {
       brief = data.brief;
-      notice = `Brief ${t.nama_project} tersimpan.`;
+      s.notice = `Brief ${t.nama_project} tersimpan.`;
       hapusDraft('brief');
       tutupPanel();
     }
   }
 
-  // Print Brief (redesign 08, #61): kop rapi + hanya field yang terisi (Q32).
+  // Print Brief removed: delegates to ./dashboard/lib/print.js (byte-identical).
   function printBrief(t) {
-    const b = brief ?? {};
-    const row = (k, v) =>
-      v
-        ? `<tr><td style="vertical-align:top;padding:6px 8px;width:160px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:0.06em">${k}</td><td style="vertical-align:top;padding:6px 8px;border-bottom:1px solid #eee">${String(v).replace(/\n/g, '<br>')}</td></tr>`
-        : '';
-    cetakDokumen(`Brief — ${t.nama_project}`, `
-      ${kopDokumen('PROJECT BRIEF')}
-      <h1>PROJECT BRIEF</h1>
-      <p style="margin:0 0 12px;color:#555">${t.nama_project} · ${t.nama_client}</p>
-      <table class="layout">
-      ${row('Objective', b.objective)}${row('Audience', b.audience)}
-      ${row('Style', b.style)}${row('Mood', b.mood)}
-      ${row('DO', b.dos)}${row("DON'T", b.donts)}
-      ${row('Lokasi', b.lokasi)}${row('Talent', b.talent)}
-      ${row('Deliverables', b.deliverables)}${row('Deadline', b.deadline)}
-      ${row('Notes', b.notes)}
-      </table>`);
+    printBriefPure(t, brief, settings);
   }
 
   // --- Shell #54 (ADR-0012): sidebar + drawer + hash nav + banner ---
-  let view = $state('ringkasan');
-  let ringkasan = $state(null);
-  let setForm = $state({});
-  // Nav map: view key → label + icon component. The icon choice is written down
-  // per view (antislop R-04): dashboard = overview, arrow-left-right = money
-  // in/out, file-text = budget document (RAB), receipt = bill (Invoice),
-  // package = bundled paket, wrench = equipment (Alat), settings = Settings.
-  const NAV = [
-    ['OPERASIONAL', [
-      ['ringkasan', 'Ringkasan', LayoutDashboard],
-      ['transaksi', 'Transaksi', ArrowLeftRight],
-      ['rab', 'RAB', FileText],
-      ['invoice', 'Invoice', Receipt],
-      ['paket', 'Paket', Package],
-    ]],
-    ['MASTER', [['alat', 'Alat', Wrench]]],
-  ];
-  const VIEW_KEYS = [...NAV.flatMap(([, g]) => g.map(([k]) => k)), 'settings'];
+  // `view` now lives in nav.svelte.js (ticket 08); aliased for the markup.
+  const view = $derived(navView.current);
+  const setForm = $state({});
+  // Nav map lives in nav.svelte.js (keys + labels); the shell supplies icons.
+  // Icons (antislop R-04): dashboard = overview, arrow-left-right = money in/out,
+  // file-text = budget document (RAB), receipt = bill (Invoice), package =
+  // bundled paket, wrench = equipment (Alat), settings = Settings.
+  const NAV_ICONS = {
+    ringkasan: LayoutDashboard,
+    transaksi: ArrowLeftRight,
+    rab: FileText,
+    invoice: Receipt,
+    paket: Package,
+    alat: Wrench,
+  };
 
-  // Lompat Ringkasan (#58): satu-satunya pengecualian reset-expand (Q25) —
-  // target expand/filter dibawa variabel ini, dipasang SETELAH tampilkan()
-  // selesai mereset. Sekali pakai: tampilkan() mengonsumsinya.
-  // Sengaja BUKAN $state: hanya dibaca imperatif di dalam tampilkan(),
-  // tak pernah dari markup/$derived — jangan dipakai reaktif.
-  let lompatExpand = null;
+  // Lompat Ringkasan + cross-view Panel opening now live in nav.svelte.js
+  // (ticket 08) as imperative one-shots with a documented ordering contract.
 
-  // Cross-view Panel open (ticket 05): `dariPaket` switches to #/rab and wants the
-  // RAB builder Panel open there. `tampilkan()` closes the Panel on every view
-  // change, so the open has to happen AFTER that reset — this one-shot carries it,
-  // consumed by tampilkan() once the view has switched. Imperative, never reactive.
-  let pendingPanel = null;
-
-  async function tampilkan(v) {
-    if (!VIEW_KEYS.includes(v)) v = 'ringkasan';
-    view = v;
-    // Panel is bound to a form opened from one view; leaving that view closes it
-    // so a stale Panel never floats over an unrelated view (ticket 02).
-    tutupPanel();
-    // Q25: expand reset saat pindah view (lompat Ringkasan #58 = pengecualian:
-    // lompatExpand dipasang ulang tepat sesudah reset di bawah).
-    if (v !== 'transaksi') {
-      openTransaksiId = null;
-      briefOpenId = null;
-    }
-    if (v !== 'rab') openRabId = null;
-    if (v !== 'invoice') openInvoiceId = null;
-    // Expand + builder Paket ikut reset (Q25); tak ada lapis-dua tersisa.
-    if (v !== 'paket') {
-      openPaketId = null;
-      pkTarget = null;
-    }
-    // Expand + lapis-dua Alat ikut reset (Q25); toggle arsip sesi tetap.
-    if (v !== 'alat') {
-      openId = null;
-      servisFormId = null;
-    }
-    if (lompatExpand) {
-      const { target, id } = lompatExpand;
-      lompatExpand = null;
-      if (target === 'invoice' && v === 'invoice') {
-        const inv = invoices.find((x) => x.id === id);
-        if (inv) bukaInvoice(inv);
-      } else if (target === 'transaksi' && v === 'transaksi') {
-        const t = transaksi.find((x) => x.id === id);
-        if (t) bukaTransaksi(t);
+  // Register the shell's hooks with nav: the Panel, the view openers, and the
+  // per-view UI reset. Nav calls these; it never imports them (ADR-0014).
+  setNavHooks({
+    tutupPanel: () => tutupPanel(),
+    bukaPanel: (judul, isi) => bukaPanel(judul, isi),
+    bukaInvoice: (inv) => bukaInvoice(inv),
+    bukaTransaksi: (t) => bukaTransaksi(t),
+    onSettingsEnter: () => {
+      // Copy ALL settings keys (not a hardcoded subset) so the form can never
+      // silently drop a field the API returns; setForm is a const object, so
+      // mutate it in place rather than reassigning the binding.
+      for (const k of Object.keys(setForm)) delete setForm[k];
+      Object.assign(setForm, settings);
+    },
+    resetViewUi: (v) => {
+      // Q25: expand reset saat pindah view (lompat = pengecualian, ditangani nav).
+      if (v !== 'transaksi') {
+        openTransaksiId = null;
+        briefOpenId = null;
       }
-    }
-    if (v === 'ringkasan') {
-      const { res, data } = await api('/api/ringkasan');
-      if (res.ok) ringkasan = data;
-    }
-    // Cross-view Panel open (ticket 05): consumed after the reset above so the
-    // Panel is not closed again by this same tampilkan() call. Clear it whichever
-    // view lands, so a redirected/missed switch can never leave a stale one-shot
-    // that pops the Panel on a later unrelated #/rab visit.
-    if (pendingPanel) {
-      const { view: wantView, judul, isi } = pendingPanel;
-      pendingPanel = null;
-      if (wantView === v) bukaPanel(judul, isi);
-    }
-    if (v === 'settings') setForm = { ...settings };
-  }
+      if (v !== 'rab') openRabId = null;
+      if (v !== 'invoice') openInvoiceId = null;
+      if (v !== 'paket') {
+        openPaketId = null;
+        pkTarget = null;
+      }
+      if (v !== 'alat') {
+        openId = null;
+        servisFormId = null;
+      }
+    },
+  });
 
   // --- Redesign 05 (#58): 4 kartu + perhatian + recent, semua klik-lompat ---
   // Mapping klik (spec): kas → Invoice; piutang → Invoice prefilter unpaid;
@@ -1204,40 +951,26 @@
       : '',
   );
 
-  function lompatInvoice(filter = 'semua', expandId = null) {
-    invSearch = '';
-    invStatusFilter = filter;
-    if (view === 'invoice') {
-      // Sudah di view target: tak ada hashchange → pasang expand langsung.
-      const inv = expandId ? invoices.find((x) => x.id === expandId) : null;
-      if (inv) bukaInvoice(inv);
-      else openInvoiceId = null;
-      return;
-    }
-    lompatExpand = expandId ? { target: 'invoice', id: expandId } : null;
-    go('invoice');
-  }
-
-  function lompatTransaksi(filter = 'semua', expandId = null) {
-    txSearch = '';
-    txStatusFilter = filter;
-    if (view === 'transaksi') {
-      const t = expandId ? transaksi.find((x) => x.id === expandId) : null;
-      if (t) bukaTransaksi(t);
-      else {
-        openTransaksiId = null;
-        briefOpenId = null;
-      }
-      return;
-    }
-    lompatExpand = expandId ? { target: 'transaksi', id: expandId } : null;
-    go('transaksi');
-  }
-
-  function go(v) {
-    location.hash = '#/' + v;
-  }
-  const viewDariHash = () => (location.hash.match(/^#\/([\w-]+)/) ?? [])[1];
+  // lompatInvoice / lompatTransaksi / go / viewDariHash removed: they live in
+  // nav.svelte.js (ticket 08). These thin local adapters supply the view-local
+  // filter setters + open-clearing helpers nav needs (same shape as before).
+  const navDeps = {
+    setInvFilter: (f) => {
+      invSearch = '';
+      invStatusFilter = f;
+    },
+    setTxFilter: (f) => {
+      txSearch = '';
+      txStatusFilter = f;
+    },
+    clearInvoiceOpen: () => (openInvoiceId = null),
+    clearTransaksiOpen: () => {
+      openTransaksiId = null;
+      briefOpenId = null;
+    },
+  };
+  const lompatKeInvoice = (filter = 'semua', expandId = null) => lompatInvoice(filter, expandId, navDeps);
+  const lompatKeTransaksi = (filter = 'semua', expandId = null) => lompatTransaksi(filter, expandId, navDeps);
 
   // Badge sidebar (Q29): invoice belum-lunas (merah bila ada overdue,
   // kuning selain itu), transaksi aktif (navy). 0 = badge hilang.
@@ -1333,41 +1066,20 @@
   // Banner sticky (Q37): notice auto-hides after 6s, error stays until dismissed.
   $effect(() => {
     if (!notice) return;
-    const t = setTimeout(() => (notice = ''), 6000);
+    const t = setTimeout(() => (s.notice = ''), 6000);
     return () => clearTimeout(t);
   });
 
-  // Chip status 3 warna + teks (Q11): hijau selesai/kuning berjalan/merah bahaya.
-  // Satu klasifikasi lifecycle dipakai bersama; `rwChip` memetakan kind ke palet
-  // Railway dark (ADR-0013 Q19). Nilai status dari data tetap apa adanya.
-  const statusKind = (status, overdue = false) => {
-    if (overdue || status === 'batal' || status === 'rejected') return 'danger';
-    if (status === 'paid' || status === 'approved' || status === 'selesai') return 'ok';
-    return 'neutral';
-  };
-  // Chip status versi Railway: teks terang di atas tint 15%, kontras >=7:1 pada
-  // permukaan charcoal #33323E tempat badge ini dirender.
-  const rwChip = (status, overdue = false) => {
-    const kind = statusKind(status, overdue);
-    if (kind === 'danger') return 'bg-rw-danger/15 text-rw-danger-text';
-    if (kind === 'ok') return 'bg-rw-ok/15 text-rw-ok-text';
-    return 'bg-rw-off-white/10 text-rw-off-white';
-  };
-
-  // Tanggal tampil Indonesia pendek (Q30): 2 Agu 2026. Input tetap date.
-  const tgl = (iso) =>
-    iso
-      ? new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-      : '';
+  // statusKind / rwChip removed: imported from ./dashboard/lib/format.js.
 
   async function simpanSettings(e) {
     e.preventDefault();
-    error = '';
+    s.error = '';
     const { res, data } = await api('/api/settings', { method: 'PUT', body: JSON.stringify(setForm) });
-    if (!res.ok) error = data.error ?? 'Gagal menyimpan settings.';
+    if (!res.ok) s.error = data.error ?? 'Gagal menyimpan settings.';
     else {
-      settings = data.settings;
-      notice = 'Settings tersimpan. Dokumen berikutnya pakai identitas baru.';
+      s.settings = data.settings;
+      s.notice = 'Settings tersimpan. Dokumen berikutnya pakai identitas baru.';
     }
   }
 </script>
@@ -1869,8 +1581,8 @@
   <nav class="flex-1 overflow-y-auto px-2 pb-4" aria-label="Dashboard">
     {#each NAV as [group, items] (group)}
       <p class="px-3 pt-4 pb-1 text-caption uppercase tracking-wide text-rw-mid-gray">{group}</p>
-      {#each items as [v, label, Icon] (v)}
-        {@render navItem(v, label, Icon)}
+      {#each items as [v, label] (v)}
+        {@render navItem(v, label, NAV_ICONS[v])}
       {/each}
     {/each}
     <div class="mx-3 mt-4 border-t border-rw-border-gray/40"></div>
@@ -1954,7 +1666,7 @@
       role={error ? 'alert' : 'status'}
     >
       <span>{error || notice}</span>
-      <button class="shrink-0 text-current underline" aria-label="Tutup notifikasi" onclick={() => { error = ''; notice = ''; }}>Tutup</button>
+      <button class="shrink-0 text-current underline" aria-label="Tutup notifikasi" onclick={() => { s.error = ''; s.notice = ''; }}>Tutup</button>
     </div>
   {/if}
 
@@ -2232,7 +1944,7 @@
                bukan filter tanggal — mapping #58 tak berubah). -->
           <button
             class="group flex flex-wrap items-end justify-between gap-4 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-6 text-left transition-colors hover:border-rw-border-gray"
-            onclick={() => lompatInvoice()}
+            onclick={() => lompatKeInvoice()}
             data-card-kas
           >
             <span class="grid gap-3">
@@ -2244,7 +1956,7 @@
 
           <!-- Grid metrik pendamping: label kecil, angka medium. -->
           <div class="grid grid-cols-2 gap-4 md:grid-cols-3">
-            <button class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 text-left transition-colors hover:border-rw-border-gray" onclick={() => lompatInvoice('unpaid')} data-card-piutang>
+            <button class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 text-left transition-colors hover:border-rw-border-gray" onclick={() => lompatKeInvoice('unpaid')} data-card-piutang>
               <p class="text-caption uppercase tracking-wide text-rw-light-gray">Outstanding</p>
               <p class="mt-2 text-subheading font-normal">{rupiah(ringkasan.piutang)}</p>
             </button>
@@ -2252,7 +1964,7 @@
               <p class="text-caption uppercase tracking-wide text-rw-light-gray">Alat balik modal</p>
               <p class="mt-2 text-subheading font-normal">{alatBalikModal}/{ringkasan.per_alat.length}</p>
             </button>
-            <button class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 text-left transition-colors hover:border-rw-border-gray max-md:col-span-2" onclick={() => lompatTransaksi('terjadwal')} data-card-job>
+            <button class="rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-4 text-left transition-colors hover:border-rw-border-gray max-md:col-span-2" onclick={() => lompatKeTransaksi('terjadwal')} data-card-job>
               <p class="text-caption uppercase tracking-wide text-rw-light-gray">Job aktif</p>
               <p class="mt-2 text-subheading font-normal">{ringkasan.job_aktif}</p>
             </button>
@@ -2266,7 +1978,7 @@
           <ul class="mt-2 grid gap-2">
             {#each perhatian as b (b.id)}
               <li>
-                <button class="flex w-full justify-between gap-2 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3 text-left text-body-sm transition-colors hover:border-rw-border-gray" onclick={() => lompatInvoice(b.isOverdue ? 'overdue' : 'unpaid', b.id)} data-perhatian-item>
+                <button class="flex w-full justify-between gap-2 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3 text-left text-body-sm transition-colors hover:border-rw-border-gray" onclick={() => lompatKeInvoice(b.isOverdue ? 'overdue' : 'unpaid', b.id)} data-perhatian-item>
                   <span class="flex items-center gap-2">
                     {b.nomor} · tempo {tgl(b.jatuh_tempo)}
                     {#if b.isOverdue}<span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(b.status, true)}">overdue</span>{/if}
@@ -2285,7 +1997,7 @@
           <ul class="mt-2 grid gap-2">
             {#each ringkasan.recent as t (t.id)}
               <li>
-                <button class="flex w-full justify-between gap-2 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3 text-left text-body-sm transition-colors hover:border-rw-border-gray" onclick={() => lompatTransaksi('semua', t.id)} data-recent-item>
+                <button class="flex w-full justify-between gap-2 rounded-rw-card border border-rw-border-gray/40 bg-rw-charcoal p-3 text-left text-body-sm transition-colors hover:border-rw-border-gray" onclick={() => lompatKeTransaksi('semua', t.id)} data-recent-item>
                   <span class="flex items-center gap-2">{t.nama_project} · {t.nama_client} <span class="rounded-rw-badge px-2 py-0.5 text-caption {rwChip(t.status)}">{t.status}</span></span>
                   <span>{rupiah(t.total)}</span>
                 </button>

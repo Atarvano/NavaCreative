@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { ScrollTrigger, motion } from '../lib/motion.js';
-  import Pill from '../components/ui/Pill.svelte';
+  import { ScrollTrigger, motion } from '../../lib/motion.js';
+  import Pill from '../../components/ui/Pill.svelte';
 
   // Hide-on-scroll chrome (never while the menu is open); reappears when
   // the overlay opens.

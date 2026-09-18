@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, ScrollTrigger, motion, reducedMotion } from '../lib/motion.js';
+  import { gsap, ScrollTrigger, motion, reducedMotion } from '../../lib/motion.js';
 
   // NAVA wordmark lift that hands off to the paused hero intro. The 4s
   // failsafe guarantees the page is never trapped; reduced-motion visitors

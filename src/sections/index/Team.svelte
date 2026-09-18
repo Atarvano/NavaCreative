@@ -1,8 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, drift, tilt } from '../lib/motion.js';
-  import SectionTitle from '../components/ui/SectionTitle.svelte';
-  import Tag from '../components/ui/Tag.svelte';
+  import { gsap, motion, lines, drift, tilt } from '../../lib/motion.js';
+  import SectionTitle from '../../components/ui/SectionTitle.svelte';
+  import Tag from '../../components/ui/Tag.svelte';
 
   // Editorial photo grid: all four Makers visible at once, photos dominant.
   // Title line reveal + one grid stagger on entry. No pin anywhere: the

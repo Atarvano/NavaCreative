@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, ScrollTrigger, motion, tilt } from '../lib/motion.js';
-  import Tag from '../components/ui/Tag.svelte';
+  import { gsap, ScrollTrigger, motion, tilt } from '../../lib/motion.js';
+  import Tag from '../../components/ui/Tag.svelte';
 
   // Work portfolio in Tailwind: static markup plus the ADR-0003 desktop pin
   // (exactly 100dvh, start top top, scrub, no anticipatePin) with

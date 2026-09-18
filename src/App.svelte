@@ -1,17 +1,17 @@
 <script>
-  import Nav from './sections/Nav.svelte';
-  import Preloader from './sections/Preloader.svelte';
-  import Hero from './sections/Hero.svelte';
-  import Marquee from './sections/Marquee.svelte';
-  import About from './sections/About.svelte';
-  import Services from './sections/Services.svelte';
-  import Work from './sections/Work.svelte';
-  import Live from './sections/Live.svelte';
-  import Team from './sections/Team.svelte';
-  import Cta from './sections/Cta.svelte';
-  import Footer from './sections/Footer.svelte';
-  import MenuOverlay from './sections/MenuOverlay.svelte';
-  import Cursor from './sections/Cursor.svelte';
+  import Nav from './sections/index/Nav.svelte';
+  import Preloader from './sections/index/Preloader.svelte';
+  import Hero from './sections/index/Hero.svelte';
+  import Marquee from './sections/index/Marquee.svelte';
+  import About from './sections/index/About.svelte';
+  import Services from './sections/index/Services.svelte';
+  import Work from './sections/index/Work.svelte';
+  import Live from './sections/index/Live.svelte';
+  import Team from './sections/index/Team.svelte';
+  import Cta from './sections/index/Cta.svelte';
+  import Footer from './sections/index/Footer.svelte';
+  import MenuOverlay from './sections/index/MenuOverlay.svelte';
+  import Cursor from './sections/index/Cursor.svelte';
 
   // Preloader owns the intro gate and plays the hero's paused
   // timeline when it lifts (or immediately under reduced motion).

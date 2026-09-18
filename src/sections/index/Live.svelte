@@ -1,8 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, drift, tilt, SCRUB_RANGE } from '../lib/motion.js';
-  import SectionTitle from '../components/ui/SectionTitle.svelte';
-  import Tag from '../components/ui/Tag.svelte';
+  import { gsap, motion, lines, drift, tilt, SCRUB_RANGE } from '../../lib/motion.js';
+  import SectionTitle from '../../components/ui/SectionTitle.svelte';
+  import Tag from '../../components/ui/Tag.svelte';
 
   // Heading line reveal + card cascade + title drift; the parallax scrub
   // on each frame's img (triggered off the .parallax wrapper) runs

@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { ScrollTrigger, motion } from '../lib/motion.js';
+  import { ScrollTrigger, motion } from '../../lib/motion.js';
 
   // Hide-on-scroll chrome, same geometry as the landing nav but with no menu
   // state to consult — service pages have no Menu button or overlay.

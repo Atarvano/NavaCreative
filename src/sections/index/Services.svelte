@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, drift } from '../lib/motion.js';
-  import SectionTitle from '../components/ui/SectionTitle.svelte';
+  import { gsap, motion, lines, drift } from '../../lib/motion.js';
+  import SectionTitle from '../../components/ui/SectionTitle.svelte';
 
   // Heading line reveal + row cascade; desktop adds the cursor-follow
   // preview with quickTo, cleaned up by the AbortController on breakpoint

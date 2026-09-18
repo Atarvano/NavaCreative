@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
-import { authRoutes } from './auth.js';
-import { alatRoutes } from './alat.js';
-import { paketRoutes } from './paket.js';
-import { rabRoutes } from './rab.js';
-import { transaksiRoutes } from './transaksi.js';
-import { invoiceRoutes } from './invoice.js';
-import { ringkasanRoutes } from './ringkasan.js';
-import { settingsRoutes } from './settings.js';
+import { authRoutes } from './routes/auth.js';
+import { alatRoutes } from './routes/alat.js';
+import { paketRoutes } from './routes/paket.js';
+import { rabRoutes } from './routes/rab.js';
+import { transaksiRoutes } from './routes/transaksi.js';
+import { invoiceRoutes } from './routes/invoice.js';
+import { ringkasanRoutes } from './routes/ringkasan.js';
+import { settingsRoutes } from './routes/settings.js';
+import { notFound } from './lib/respond.js';
 
 // Single Worker (ADR-0011): the Hono app owns /api/* only. Static files
 // (dist/ via the wrangler `assets` directory) are served by Cloudflare
@@ -25,7 +26,7 @@ settingsRoutes(app);
 // ponytail: no global guardApi — every route carries requireSession
 // itself, so the guard can't be silently shadowed by route order.
 
-app.notFound((c) => c.json({ error: 'Tidak ditemukan.' }, 404));
+app.notFound(notFound);
 
 export default app;
 export { app };

@@ -1,8 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, magnetic } from '../lib/motion.js';
-  import Pill from '../components/ui/Pill.svelte';
-  import { WA_LINK } from '../lib/services.js';
+  import { gsap, motion, magnetic } from '../../lib/motion.js';
+  import Pill from '../../components/ui/Pill.svelte';
+  import { WA_LINK } from '../../lib/services.js';
 
   // Paused intro timeline (the preloader plays it via play()); owns its
   // initial states via fromTo since the Svelte shell releases the

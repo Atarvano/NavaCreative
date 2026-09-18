@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, ScrollTrigger, motion } from '../lib/motion.js';
+  import { gsap, ScrollTrigger, motion } from '../../lib/motion.js';
 
   // Constant drift (quadrupled track) with a scroll-velocity
   // kick to the loop's timeScale.

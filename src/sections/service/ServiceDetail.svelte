@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion, lines, reveals } from '../lib/motion.js';
-  import Tag from '../components/ui/Tag.svelte';
+  import { gsap, motion, lines, reveals } from '../../lib/motion.js';
+  import Tag from '../../components/ui/Tag.svelte';
 
   // Statement + related Work/Live gallery + cross-links (.live-card reuse,
   // h2 names, lazy imgs with dimensions). Title line reveal, lede fade-up,

@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion } from '../lib/motion.js';
+  import { gsap, motion } from '../../lib/motion.js';
 
   // Site-wide custom cursor (ticket 05, desktop fine-pointer only): one
   // fixed dot that chases the pointer transform-only (quickTo, no layout

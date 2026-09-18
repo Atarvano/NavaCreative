@@ -1,8 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { gsap, motion } from '../lib/motion.js';
-  import Pill from '../components/ui/Pill.svelte';
-  import { WA_LINK } from '../lib/services.js';
+  import { gsap, motion } from '../../lib/motion.js';
+  import Pill from '../../components/ui/Pill.svelte';
+  import { WA_LINK } from '../../lib/services.js';
 
   // Full-screen Navy Ink nav (mobile only): the paused open/close timeline
   // plays on the `open` prop; the class toggle + scroll-lock below keep the

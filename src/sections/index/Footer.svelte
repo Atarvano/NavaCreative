@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { motion, lines, drift } from '../lib/motion.js';
-  import { WA_LINK } from '../lib/services.js';
+  import { motion, lines, drift } from '../../lib/motion.js';
+  import { WA_LINK } from '../../lib/services.js';
 
   // Giant closing wordmark line reveal.
   // `base` prefixes the menu anchors: '' on the index, 'index.html'
