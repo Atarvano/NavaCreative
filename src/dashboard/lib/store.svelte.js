@@ -22,6 +22,10 @@
 
 import { ambilDraft, hapusDraft, draftAda, stashDraft } from "./draft.js";
 import { subtotal } from "./format.js";
+import { api, setDraftReaders } from "./api.js";
+
+// Re-exported so existing callers (the shell's onMount) keep one import site.
+export { api, setDraftReaders };
 
 // --- State --------------------------------------------------------------
 export const state = $state({
@@ -37,38 +41,6 @@ export const state = $state({
   notice: "",
   busy: false,
 });
-
-// --- HTTP client --------------------------------------------------------
-// Coupled to this store on purpose: the 401 branch reads the in-flight builder
-// drafts. The draft *readers* are registered by the component that owns the
-// builder form fields (setDraftReaders), because those fields are UI state and
-// stay in the view layer. ADR-0014 records this coupling as explicit.
-let draftReaders = { tx: () => ({}), rab: () => ({}), brief: () => null };
-
-export function setDraftReaders(readers) {
-  draftReaders = { ...draftReaders, ...readers };
-}
-
-export async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: { "content-type": "application/json", ...(opts.headers ?? {}) },
-  });
-  if (res.status === 401) {
-    // Q36: selamatkan draft builder sebelum pindah ke login.
-    const d = draftReaders.tx();
-    if (d.nama_project || d.nama_client || d.baris?.length) stashDraft("transaksi", d);
-    const rd = draftReaders.rab();
-    if (draftAda(rd)) stashDraft("rab", rd);
-    const br = draftReaders.brief();
-    if (br) stashDraft("brief", br);
-    // pi-lens-ignore: no-open-redirect, no-open-redirect-js
-    location.href = "login.html";
-    throw new Error("unauthorized");
-  }
-  const data = await res.json().catch(() => ({}));
-  return { res, data };
-}
 
 // --- Load (the six-endpoint sequential fetch) ---------------------------
 export async function load() {
@@ -104,7 +76,10 @@ export async function logout() {
 
 // --- Alat ---------------------------------------------------------------
 export async function addAlat(payload) {
-  const { res, data } = await api("/api/alat", { method: "POST", body: JSON.stringify(payload) });
+  const { res, data } = await api("/api/alat", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   if (!res.ok) {
     state.error = data.error ?? "Gagal menambah alat.";
     return null;
@@ -160,12 +135,17 @@ export async function addServis(a, payload) {
 
 // --- Paket --------------------------------------------------------------
 export async function simpanPaket({ editing, targetId, payload }) {
-  const { res, data } = await api(editing ? `/api/paket/${targetId}` : "/api/paket", {
-    method: editing ? "PATCH" : "POST",
-    body: JSON.stringify(payload),
-  });
+  const { res, data } = await api(
+    editing ? `/api/paket/${targetId}` : "/api/paket",
+    {
+      method: editing ? "PATCH" : "POST",
+      body: JSON.stringify(payload),
+    },
+  );
   if (!res.ok) {
-    state.error = data.error ?? (editing ? "Gagal mengubah paket." : "Gagal menyimpan paket.");
+    state.error =
+      data.error ??
+      (editing ? "Gagal mengubah paket." : "Gagal menyimpan paket.");
     return { ok: false };
   }
   state.notice = editing
@@ -187,7 +167,10 @@ export async function dariPaket(p) {
 
 // --- RAB ----------------------------------------------------------------
 export async function simpanRab(payload) {
-  const { res, data } = await api("/api/rab", { method: "POST", body: JSON.stringify(payload) });
+  const { res, data } = await api("/api/rab", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   if (!res.ok) {
     state.error = data.error ?? "Gagal menyimpan RAB.";
     return { ok: false };
@@ -210,7 +193,9 @@ export async function statusRab(r, status) {
 }
 
 export async function setujui(r) {
-  const { res, data } = await api(`/api/rab/${r.id}/setujui`, { method: "POST" });
+  const { res, data } = await api(`/api/rab/${r.id}/setujui`, {
+    method: "POST",
+  });
   if (!res.ok) {
     state.error = data.error ?? "Gagal menyetujui.";
     return null;
@@ -222,7 +207,10 @@ export async function setujui(r) {
 
 // --- Transaksi ----------------------------------------------------------
 export async function simpanTransaksi(payload) {
-  const { res, data } = await api("/api/transaksi", { method: "POST", body: JSON.stringify(payload) });
+  const { res, data } = await api("/api/transaksi", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   if (!res.ok) {
     state.error = data.error ?? "Gagal menyimpan transaksi.";
     return { ok: false };
@@ -317,7 +305,9 @@ export async function bayar(i, payload) {
 }
 
 export async function voidInvoice(i) {
-  const { res, data } = await api(`/api/invoice/${i.id}/batal`, { method: "POST" });
+  const { res, data } = await api(`/api/invoice/${i.id}/batal`, {
+    method: "POST",
+  });
   if (res.ok) {
     state.notice = `${i.nomor} dibatalkan.`;
     await load();
@@ -328,7 +318,10 @@ export async function voidInvoice(i) {
 // --- Settings -----------------------------------------------------------
 // Deliberately NO refetch (contract asymmetry #2): updates from the response.
 export async function simpanSettings(payload) {
-  const { res, data } = await api("/api/settings", { method: "PUT", body: JSON.stringify(payload) });
+  const { res, data } = await api("/api/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
   if (!res.ok) {
     state.error = data.error ?? "Gagal menyimpan settings.";
     return { ok: false };

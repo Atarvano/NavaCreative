@@ -19,28 +19,31 @@
 //    re-applied right after the reset. Both are imperative one-shots, never
 //    reactive state.
 
-import { state } from './store.svelte.js';
+import { state } from "./store.svelte.js";
 
 // --- View keys ----------------------------------------------------------
 // The icon component per view lives in the shell (it imports the glyphs), so
 // nav carries only the keys/labels and the shell maps keys to icons.
 export const NAV = [
   [
-    'OPERASIONAL',
+    "OPERASIONAL",
     [
-      ['ringkasan', 'Ringkasan'],
-      ['transaksi', 'Transaksi'],
-      ['rab', 'RAB'],
-      ['invoice', 'Invoice'],
-      ['paket', 'Paket'],
+      ["ringkasan", "Ringkasan"],
+      ["transaksi", "Transaksi"],
+      ["rab", "RAB"],
+      ["invoice", "Invoice"],
+      ["paket", "Paket"],
     ],
   ],
-  ['MASTER', [['alat', 'Alat']]],
+  ["MASTER", [["alat", "Alat"]]],
 ];
 
-export const VIEW_KEYS = [...NAV.flatMap(([, g]) => g.map(([k]) => k)), 'settings'];
+export const VIEW_KEYS = [
+  ...NAV.flatMap(([, g]) => g.map(([k]) => k)),
+  "settings",
+];
 
-export const view = $state({ current: 'ringkasan' });
+export const view = $state({ current: "ringkasan" });
 
 // --- Hooks (registered by the shell / views) ----------------------------
 let hooks = {
@@ -60,13 +63,21 @@ export function setNavHooks(next) {
 let lompatExpand = null;
 let pendingPanel = null;
 
+// A cross-view jump may pre-filter the destination view (Ringkasan's cards →
+// filtered Invoice/Transaksi). Since ticket 09 each view owns its own filter
+// state, the filter cannot be assigned imperatively on state that is about to
+// be re-created or that lives in another component. It travels as a one-shot:
+//  - cross-view: the destination view reads it when it mounts;
+//  - same-view: the mounted view reacts to this rune.
+export const pendingFilter = $state({ invoice: null, transaksi: null });
+
 export function setPendingPanel(panel) {
   pendingPanel = panel;
 }
 
 // --- Navigation ---------------------------------------------------------
 export async function tampilkan(v) {
-  if (!VIEW_KEYS.includes(v)) v = 'ringkasan';
+  if (!VIEW_KEYS.includes(v)) v = "ringkasan";
   view.current = v;
   // Panel is bound to a form opened from one view; leaving that view closes it
   // so a stale Panel never floats over an unrelated view (ticket 02).
@@ -77,16 +88,16 @@ export async function tampilkan(v) {
   if (lompatExpand) {
     const { target, id } = lompatExpand;
     lompatExpand = null;
-    if (target === 'invoice' && v === 'invoice') {
+    if (target === "invoice" && v === "invoice") {
       const inv = state.invoices.find((x) => x.id === id);
       if (inv) hooks.bukaInvoice(inv);
-    } else if (target === 'transaksi' && v === 'transaksi') {
+    } else if (target === "transaksi" && v === "transaksi") {
       const t = state.transaksi.find((x) => x.id === id);
       if (t) hooks.bukaTransaksi(t);
     }
   }
-  if (v === 'ringkasan') {
-    const { res, data } = await fetch('/api/ringkasan').then(async (r) => ({
+  if (v === "ringkasan") {
+    const { res, data } = await fetch("/api/ringkasan").then(async (r) => ({
       res: r,
       data: await r.json().catch(() => ({})),
     }));
@@ -101,36 +112,39 @@ export async function tampilkan(v) {
     pendingPanel = null;
     if (wantView === v) hooks.bukaPanel(judul, isi);
   }
-  if (v === 'settings') hooks.onSettingsEnter();
+  if (v === "settings") hooks.onSettingsEnter();
 }
 
-export function lompatInvoice(filter = 'semua', expandId = null, deps) {
-  deps.setInvFilter(filter);
-  if (view.current === 'invoice') {
-    // Sudah di view target: tak ada hashchange → pasang expand langsung.
+export function lompatInvoice(filter = "semua", expandId = null, deps) {
+  if (view.current === "invoice") {
+    // Sudah di view target: tak ada hashchange → pasang filter + expand langsung.
+    pendingFilter.invoice = filter;
     const inv = expandId ? state.invoices.find((x) => x.id === expandId) : null;
     if (inv) hooks.bukaInvoice(inv);
     else deps.clearInvoiceOpen();
     return;
   }
-  lompatExpand = expandId ? { target: 'invoice', id: expandId } : null;
-  go('invoice');
+  pendingFilter.invoice = filter;
+  lompatExpand = expandId ? { target: "invoice", id: expandId } : null;
+  go("invoice");
 }
 
-export function lompatTransaksi(filter = 'semua', expandId = null, deps) {
-  deps.setTxFilter(filter);
-  if (view.current === 'transaksi') {
+export function lompatTransaksi(filter = "semua", expandId = null, deps) {
+  if (view.current === "transaksi") {
+    pendingFilter.transaksi = filter;
     const t = expandId ? state.transaksi.find((x) => x.id === expandId) : null;
     if (t) hooks.bukaTransaksi(t);
     else deps.clearTransaksiOpen();
     return;
   }
-  lompatExpand = expandId ? { target: 'transaksi', id: expandId } : null;
-  go('transaksi');
+  pendingFilter.transaksi = filter;
+  lompatExpand = expandId ? { target: "transaksi", id: expandId } : null;
+  go("transaksi");
 }
 
 export function go(v) {
-  location.hash = '#/' + v;
+  location.hash = "#/" + v;
 }
 
-export const viewDariHash = () => (location.hash.match(/^#\/([\w-]+)/) ?? [])[1];
+export const viewDariHash = () =>
+  (location.hash.match(/^#\/([\w-]+)/) ?? [])[1];
